@@ -5,6 +5,10 @@ import android.os.Build;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.drawable.Drawable;
+import android.util.Base64;
 
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -13,6 +17,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.JSArray;
 
+import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -27,12 +32,9 @@ public class NexoraNativePlugin extends Plugin {
 
         result.put("success", true);
         result.put("platform", "android");
-
         result.put("androidVersion", Build.VERSION.RELEASE);
         result.put("sdkVersion", Build.VERSION.SDK_INT);
-
         result.put("packageName", getContext().getPackageName());
-
         result.put("manufacturer", Build.MANUFACTURER);
         result.put("brand", Build.BRAND);
         result.put("model", Build.MODEL);
@@ -94,11 +96,17 @@ public class NexoraNativePlugin extends Plugin {
                 String activityName =
                     resolveInfo.activityInfo.name;
 
+                String iconBase64 = getAppIcon(
+                    resolveInfo,
+                    packageManager
+                );
+
                 installedApps.add(
                     new AppEntry(
                         appName,
                         packageName,
-                        activityName
+                        activityName,
+                        iconBase64
                     )
                 );
             }
@@ -119,6 +127,7 @@ public class NexoraNativePlugin extends Plugin {
                 app.put("appName", entry.appName);
                 app.put("packageName", entry.packageName);
                 app.put("activityName", entry.activityName);
+                app.put("iconBase64", entry.iconBase64);
 
                 apps.put(app);
             }
@@ -147,20 +156,71 @@ public class NexoraNativePlugin extends Plugin {
         }
     }
 
+    private String getAppIcon(
+        ResolveInfo resolveInfo,
+        PackageManager packageManager
+    ) {
+        try {
+            Drawable icon =
+                resolveInfo.loadIcon(packageManager);
+
+            if (icon == null) {
+                return "";
+            }
+
+            int size = 64;
+
+            Bitmap bitmap = Bitmap.createBitmap(
+                size,
+                size,
+                Bitmap.Config.ARGB_8888
+            );
+
+            Canvas canvas = new Canvas(bitmap);
+
+            icon.setBounds(0, 0, size, size);
+            icon.draw(canvas);
+
+            ByteArrayOutputStream output =
+                new ByteArrayOutputStream();
+
+            bitmap.compress(
+                Bitmap.CompressFormat.PNG,
+                100,
+                output
+            );
+
+            bitmap.recycle();
+
+            String encoded = Base64.encodeToString(
+                output.toByteArray(),
+                Base64.NO_WRAP
+            );
+
+            return "data:image/png;base64," + encoded;
+
+        } catch (Exception error) {
+            return "";
+        }
+    }
+
     private static class AppEntry {
 
         final String appName;
         final String packageName;
         final String activityName;
+        final String iconBase64;
 
         AppEntry(
             String appName,
             String packageName,
-            String activityName
+            String activityName,
+            String iconBase64
         ) {
             this.appName = appName;
             this.packageName = packageName;
             this.activityName = activityName;
+            this.iconBase64 = iconBase64;
         }
     }
 }

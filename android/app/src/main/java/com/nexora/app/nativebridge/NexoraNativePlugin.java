@@ -9,6 +9,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
 import android.util.Base64;
+import android.provider.Settings;
 
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -56,6 +57,43 @@ public class NexoraNativePlugin extends Plugin {
         );
 
         call.resolve(result);
+    }
+
+    @PluginMethod
+    public void openAccessibilitySettings(PluginCall call) {
+        try {
+            Intent intent = new Intent(
+                Settings.ACTION_ACCESSIBILITY_SETTINGS
+            );
+
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+            getContext().startActivity(intent);
+
+            JSObject result = new JSObject();
+
+            result.put("success", true);
+            result.put(
+                "message",
+                "Accessibility Settings opened."
+            );
+
+            call.resolve(result);
+
+        } catch (Exception error) {
+
+            JSObject result = new JSObject();
+
+            result.put("success", false);
+            result.put(
+                "message",
+                error.getMessage() != null
+                    ? error.getMessage()
+                    : "Unable to open Accessibility Settings."
+            );
+
+            call.resolve(result);
+        }
     }
 
     @PluginMethod

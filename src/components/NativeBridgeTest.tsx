@@ -39,6 +39,21 @@ export const NativeBridgeTest: React.FC = () => {
     }
   };
 
+  const DeviceRow = ({
+    label,
+    value,
+  }: {
+    label: string;
+    value: string | number;
+  }) => (
+    <div className="flex justify-between gap-3 border-b border-slate-800 py-2 last:border-0">
+      <span className="text-slate-400">{label}</span>
+      <span className="text-white text-right break-all">
+        {value || 'Unknown'}
+      </span>
+    </div>
+  );
+
   return (
     <div className="w-full rounded-2xl bg-slate-900 border border-slate-800 p-4 space-y-4">
       <div>
@@ -46,7 +61,7 @@ export const NativeBridgeTest: React.FC = () => {
           Native Bridge Diagnostics
         </h2>
         <p className="text-xs text-slate-400 mt-1">
-          Android Native connection test
+          Android Device Information
         </p>
       </div>
 
@@ -60,22 +75,19 @@ export const NativeBridgeTest: React.FC = () => {
       </button>
 
       {info && (
-        <div className="rounded-xl bg-slate-950 p-3 space-y-2 text-sm">
-          <p className="text-emerald-400 font-bold">
+        <div className="rounded-xl bg-slate-950 p-3 space-y-1 text-sm">
+          <p className="text-emerald-400 font-bold mb-3">
             Native Bridge Connected
           </p>
-          <p className="text-slate-300">
-            Platform: {info.platform}
-          </p>
-          <p className="text-slate-300">
-            Android Version: {info.androidVersion}
-          </p>
-          <p className="text-slate-300">
-            SDK Version: {info.sdkVersion}
-          </p>
-          <p className="text-slate-300 break-all">
-            Package: {info.packageName}
-          </p>
+
+          <DeviceRow label="Platform" value={info.platform} />
+          <DeviceRow label="Manufacturer" value={info.manufacturer} />
+          <DeviceRow label="Brand" value={info.brand} />
+          <DeviceRow label="Model" value={info.model} />
+          <DeviceRow label="Device ID" value={info.device} />
+          <DeviceRow label="Android Version" value={info.androidVersion} />
+          <DeviceRow label="SDK Version" value={info.sdkVersion} />
+          <DeviceRow label="Package Name" value={info.packageName} />
         </div>
       )}
 

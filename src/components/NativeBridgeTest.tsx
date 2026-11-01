@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import {
   getNexoraNativeInfo,
   getNexoraInstalledApps,
+  launchNexoraApp,
   isNexoraNativeAvailable,
   NexoraNativeInfo,
   NexoraInstalledApp,
@@ -12,12 +13,14 @@ import {
 export const NativeBridgeTest: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [launchingPackage, setLaunchingPackage] = useState('');
 
   const [info, setInfo] = useState<NexoraNativeInfo | null>(null);
   const [apps, setApps] = useState<NexoraInstalledApp[]>([]);
 
   const [error, setError] = useState('');
   const [appError, setAppError] = useState('');
+  const [launchMessage, setLaunchMessage] = useState('');
   const [search, setSearch] = useState('');
 
   const testBridge = async () => {
@@ -52,6 +55,7 @@ export const NativeBridgeTest: React.FC = () => {
     setScanning(true);
     setAppError('');
     setApps([]);
+    setLaunchMessage('');
 
     try {
       if (!isNexoraNativeAvailable()) {
@@ -75,6 +79,34 @@ export const NativeBridgeTest: React.FC = () => {
       );
     } finally {
       setScanning(false);
+    }
+  };
+
+  const openInstalledApp = async (app: NexoraInstalledApp) => {
+    setLaunchingPackage(app.packageName);
+    setAppError('');
+    setLaunchMessage('');
+
+    try {
+      if (!isNexoraNativeAvailable()) {
+        throw new Error('Android APK থেকে App Launch পরীক্ষা করো।');
+      }
+
+      const result = await launchNexoraApp(app.packageName);
+
+      if (!result || !result.success) {
+        throw new Error(
+          result?.message || 'Unable to launch app.'
+        );
+      }
+
+      setLaunchMessage(`${app.appName} launch requested.`);
+    } catch (err) {
+      setAppError(
+        err instanceof Error ? err.message : 'Unable to launch app.'
+      );
+    } finally {
+      setLaunchingPackage('');
     }
   };
 
@@ -157,7 +189,7 @@ export const NativeBridgeTest: React.FC = () => {
           </h3>
 
           <p className="text-xs text-slate-400 mt-1">
-            Scan launchable Android apps with their original icons.
+            Tap an app to open it on your Android device.
           </p>
         </div>
 
@@ -173,6 +205,12 @@ export const NativeBridgeTest: React.FC = () => {
         {appError && (
           <p className="text-sm text-red-400 break-words">
             {appError}
+          </p>
+        )}
+
+        {launchMessage && (
+          <p className="text-sm text-emerald-400 break-words">
+            {launchMessage}
           </p>
         )}
 
@@ -196,9 +234,12 @@ export const NativeBridgeTest: React.FC = () => {
             <div className="max-h-96 overflow-y-auto space-y-2">
 
               {filteredApps.map((app) => (
-                <div
+                <button
+                  type="button"
                   key={app.packageName}
-                  className="flex items-center gap-3 rounded-xl bg-slate-950 border border-slate-800 p-3"
+                  onClick={() => openInstalledApp(app)}
+                  disabled={launchingPackage !== ''}
+                  className="w-full flex items-center gap-3 text-left rounded-xl bg-slate-950 border border-slate-800 p-3 hover:border-violet-500 disabled:opacity-50"
                 >
 
                   {app.iconBase64 ? (
@@ -223,7 +264,13 @@ export const NativeBridgeTest: React.FC = () => {
                     </p>
                   </div>
 
-                </div>
+                  <span className="text-xs text-violet-400 font-bold shrink-0">
+                    {launchingPackage === app.packageName
+                      ? 'Opening...'
+                      : 'OPEN →'}
+                  </span>
+
+                </button>
               ))}
 
               {filteredApps.length === 0 && (

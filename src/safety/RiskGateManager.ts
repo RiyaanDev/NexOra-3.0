@@ -1,8 +1,9 @@
+
 import { NexoraTool, RiskTier } from '../types';
 import { UserConfirmationCallback } from './UserConfirmationCallback';
 
 export class RiskGateManager {
-  private isAdminModeAuthorized: boolean = true;
+  private isAdminModeAuthorized = false;
 
   constructor(private confirmationCallback: UserConfirmationCallback) {}
 
@@ -22,11 +23,6 @@ export class RiskGateManager {
     return this.isAdminModeAuthorized;
   }
 
-  /**
-   * Evaluates risk level prior to executing a tool.
-   * If Admin Mode is authorized, all tools execute autonomously.
-   * Otherwise, MEDIUM, HIGH, and CRITICAL require explicit confirmation.
-   */
   async evaluateAndCanExecute(
     tool: NexoraTool,
     parameters: Record<string, any>
@@ -38,12 +34,18 @@ export class RiskGateManager {
     switch (tool.riskLevel) {
       case RiskTier.LOW:
         return true;
+
       case RiskTier.MEDIUM:
       case RiskTier.HIGH:
-      case RiskTier.CRITICAL: {
-        const explanation = `Tool '${tool.name}' requires authorization due to elevated risk tier (${tool.riskLevel}).`;
-        return await this.confirmationCallback.requestConfirmation(tool, parameters, explanation);
-      }
+      case RiskTier.CRITICAL:
+        return await this.confirmationCallback.requestConfirmation(
+          tool,
+          parameters,
+          `Tool '${tool.name}' requires confirmation (${tool.riskLevel}).`
+        );
+
+      default:
+        return false;
     }
   }
 }

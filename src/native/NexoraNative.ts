@@ -33,6 +33,11 @@ export interface NexoraLaunchAppResult {
   message?: string;
 }
 
+export interface NexoraAccessibilityStatus {
+  success: boolean;
+  connected: boolean;
+}
+
 interface NexoraNativePlugin {
   getNativeInfo(): Promise<NexoraNativeInfo>;
 
@@ -41,6 +46,8 @@ interface NexoraNativePlugin {
   launchApp(options: {
     packageName: string;
   }): Promise<NexoraLaunchAppResult>;
+
+  isAccessibilityServiceConnected(): Promise<NexoraAccessibilityStatus>;
 }
 
 const NexoraNative = registerPlugin<NexoraNativePlugin>(
@@ -84,4 +91,13 @@ export const launchNexoraApp =
     return await NexoraNative.launchApp({
       packageName: packageName.trim(),
     });
+  };
+
+export const getNexoraAccessibilityStatus =
+  async (): Promise<NexoraAccessibilityStatus | null> => {
+    if (!Capacitor.isNativePlatform()) {
+      return null;
+    }
+
+    return await NexoraNative.isAccessibilityServiceConnected();
   };

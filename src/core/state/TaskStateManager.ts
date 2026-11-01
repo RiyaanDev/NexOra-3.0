@@ -1,20 +1,38 @@
+
 import { TaskState } from '../../types';
 import { NexoraEventBus } from '../eventbus/NexoraEventBus';
 
+type StateChangeListener = (state: TaskState) => void;
+
 export class TaskStateManager {
   private currentState: TaskState = TaskState.IDLE;
-  private stateChangeListeners: ((state: TaskState) => void)[] = [];
+
+  private stateChangeListeners: Set<StateChangeListener> =
+    new Set();
 
   transitionTo(state: TaskState): void {
-    const old = this.currentState;
-    if (old === state) return;
+    const oldState = this.currentState;
+
+    if (oldState === state) return;
+
     this.currentState = state;
+
     NexoraEventBus.emit({
       type: 'StateChanged',
-      oldState: old,
+      oldState,
       newState: state,
     });
-    this.stateChangeListeners.forEach((fn) => fn(state));
+
+    this.stateChangeListeners.forEach((listener) => {
+      try {
+        listener(state);
+      } catch (error) {
+        console.error(
+          'TaskStateManager listener error:',
+          error
+        );
+      }
+    });
   }
 
   getCurrentState(): TaskState {
@@ -25,10 +43,19 @@ export class TaskStateManager {
     this.transitionTo(TaskState.IDLE);
   }
 
-  onStateChange(fn: (state: TaskState) => void): () => void {
-    this.stateChangeListeners.push(fn);
+  onStateChange(fn: StateChangeListener): () => void {
+    this.stateChangeListeners.add(fn);
+
+    // Immediately provide the current state.
+    fn(this.currentState);
+
+    // Return unsubscribe function.
     return () => {
-      this.stateChangeListeners = this.stateChangeListeners.filter((l) => l !== fn);
+      this.stateChangeListeners.delete(fn);
     };
+  }
+
+  clearListeners(): void {
+    this.stateChangeListeners.clear();
   }
 }

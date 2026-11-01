@@ -38,6 +38,11 @@ export interface NexoraAccessibilityStatus {
   connected: boolean;
 }
 
+export interface NexoraAccessibilitySettingsResult {
+  success: boolean;
+  message?: string;
+}
+
 interface NexoraNativePlugin {
   getNativeInfo(): Promise<NexoraNativeInfo>;
 
@@ -48,6 +53,8 @@ interface NexoraNativePlugin {
   }): Promise<NexoraLaunchAppResult>;
 
   isAccessibilityServiceConnected(): Promise<NexoraAccessibilityStatus>;
+
+  openAccessibilitySettings(): Promise<NexoraAccessibilitySettingsResult>;
 }
 
 const NexoraNative = registerPlugin<NexoraNativePlugin>(
@@ -100,4 +107,13 @@ export const getNexoraAccessibilityStatus =
     }
 
     return await NexoraNative.isAccessibilityServiceConnected();
+  };
+
+export const openNexoraAccessibilitySettings =
+  async (): Promise<NexoraAccessibilitySettingsResult | null> => {
+    if (!Capacitor.isNativePlatform()) {
+      return null;
+    }
+
+    return await NexoraNative.openAccessibilitySettings();
   };

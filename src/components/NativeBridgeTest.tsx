@@ -212,18 +212,20 @@ export const NativeBridgeTest: React.FC = () => {
 
   const eventTypeName = (eventType: number): string => {
     const eventNames: Record<number, string> = {
-      1: 'View Clicked',
-      2: 'View Long Clicked',
-      4: 'View Selected',
-      8: 'View Focused',
-      16: 'Window State Changed',
-      32: 'Notification State Changed',
-      64: 'View Hover Enter',
-      128: 'View Hover Exit',
-      256: 'Touch Exploration Gesture',
-      512: 'Window Content Changed',
-      4096: 'View Scrolled',
-    };
+  1: 'View Clicked',
+  2: 'View Long Clicked',
+  4: 'View Selected',
+  8: 'View Focused',
+  16: 'View Text Changed',
+  32: 'Window State Changed',
+  64: 'Notification State Changed',
+  128: 'View Hover Enter',
+  256: 'View Hover Exit',
+  512: 'Touch Exploration Started',
+  1024: 'Touch Exploration Ended',
+  2048: 'Window Content Changed',
+  4096: 'View Scrolled',
+};
 
     return eventNames[eventType] || `Event Code: ${eventType}`;
   };

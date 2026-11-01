@@ -1,3 +1,4 @@
+
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -23,67 +24,210 @@ app.post('/api/plan', async (req, res) => {
       currentContextState,
       openAiApiKey,
       geminiApiKey,
+      openRouterApiKey,
       preferredProvider,
       model,
     } = req.body;
 
-    // 1. Try OpenAI if user provided a key or if configured in env
-    const openAiKey = openAiApiKey || process.env.OPENAI_API_KEY;
-    const shouldTryOpenAI = (preferredProvider === 'openai' || !preferredProvider || preferredProvider === 'auto') && openAiKey;
+    // 1. OpenRouter Provider
+    const openRouterKey =
+      openRouterApiKey || process.env.OPENROUTER_API_KEY;
+
+    if (preferredProvider === 'openrouter') {
+      if (!openRouterKey) {
+        return res.status(400).json({
+          error: 'OPENROUTER_API_KEY_MISSING',
+          message: 'OpenRouter API Key is required.',
+        });
+      }
+
+      try {
+        const openRouterResponse = await fetch(
+          'https://openrouter.ai/api/v1/chat/completions',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${openRouterKey}`,
+              'X-Title': 'NEXORA AI Assistant',
+            },
+            body: JSON.stringify({
+              model: model || 'openai/gpt-4o-mini',
+              temperature: 0.2,
+              messages: [
+                {
+                  role: 'system',
+                  content:
+                    systemPrompt ||
+                    'You are NEXORA, a helpful AI assistant. Respond in Bengali or English. Return valid JSON only.',
+                },
+                {
+                  role: 'user',
+                  content: `Context:
+${currentContextState || ''}
+
+Available Tools:
+${availableToolsJson || '[]'}
+
+User Request:
+${userQuery || ''}
+
+Return ONLY valid JSON:
+{"reasoning":"...","selectedTool":null,"toolParameters":{},"isTaskComplete":true,"finalResponseToUser":"..."}`,
+                },
+              ],
+            }),
+          }
+        );
+
+        if (!openRouterResponse.ok) {
+          const errorText = await openRouterResponse.text();
+
+          console.error(
+            'OpenRouter API error:',
+            openRouterResponse.status,
+            errorText
+          );
+
+          return res.status(502).json({
+            error: 'OPENROUTER_API_ERROR',
+            message:
+              'OpenRouter request failed. Check API key, account credits and model ID.',
+          });
+        }
+
+        const result = await openRouterResponse.json();
+
+        const rawContent =
+          result.choices?.[0]?.message?.content || '';
+
+        if (!rawContent) {
+          return res.status(502).json({
+            error: 'OPENROUTER_EMPTY_RESPONSE',
+            message: 'OpenRouter returned an empty response.',
+          });
+        }
+
+        const cleaned = rawContent
+          .replace(/```json/gi, '')
+          .replace(/```/g, '')
+          .trim();
+
+        const parsed = JSON.parse(cleaned);
+
+        return res.json({
+          provider: 'OPENROUTER',
+          reasoning:
+            parsed.reasoning || 'Evaluated via OpenRouter',
+          selectedTool: parsed.selectedTool || null,
+          toolParameters: parsed.toolParameters || {},
+          isTaskComplete: Boolean(parsed.isTaskComplete),
+          finalResponseToUser:
+            parsed.finalResponseToUser || null,
+        });
+      } catch (openRouterError: any) {
+        console.error(
+          'OpenRouter request failed:',
+          openRouterError?.message
+        );
+
+        return res.status(502).json({
+          error: 'OPENROUTER_REQUEST_FAILED',
+          message: 'Could not process OpenRouter response.',
+        });
+      }
+    }
+
+    // 2. OpenAI Provider
+    const openAiKey =
+      openAiApiKey || process.env.OPENAI_API_KEY;
+
+    const shouldTryOpenAI =
+      (preferredProvider === 'openai' ||
+        !preferredProvider ||
+        preferredProvider === 'auto') &&
+      Boolean(openAiKey);
 
     if (shouldTryOpenAI) {
       try {
-        const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${openAiKey}`,
-          },
-          body: JSON.stringify({
-            model: model || 'gpt-4o-mini',
-            temperature: 0.2,
-            messages: [
-              {
-                role: 'system',
-                content:
-                  systemPrompt ||
-                  'You are NEXORA, an autonomous voice-controlled AI action agent. Respond in the user\'s language (Bengali or English). Always provide a helpful conversational response and choose an appropriate tool if an action is needed.',
-              },
-              {
-                role: 'user',
-                content: `Context:\n${currentContextState}\n\nTools:\n${availableToolsJson}\n\nUser Goal / Message: ${userQuery}\n\nRespond ONLY with valid raw JSON: {"reasoning": "...", "selectedTool": "...", "toolParameters": {}, "isTaskComplete": false, "finalResponseToUser": "..."}`,
-              },
-            ],
-          }),
-        });
+        const openaiResponse = await fetch(
+          'https://api.openai.com/v1/chat/completions',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${openAiKey}`,
+            },
+            body: JSON.stringify({
+              model: model || 'gpt-4o-mini',
+              temperature: 0.2,
+              messages: [
+                {
+                  role: 'system',
+                  content:
+                    systemPrompt ||
+                    'You are NEXORA, an autonomous voice-controlled AI action agent. Respond in the user\'s language (Bengali or English). Always provide a helpful conversational response and choose an appropriate tool if an action is needed.',
+                },
+                {
+                  role: 'user',
+                  content: `Context:\n${currentContextState || ''}\n\nTools:\n${availableToolsJson || '[]'}\n\nUser Goal / Message: ${userQuery || ''}\n\nRespond ONLY with valid raw JSON: {"reasoning": "...", "selectedTool": "...", "toolParameters": {}, "isTaskComplete": false, "finalResponseToUser": "..."}`,
+                },
+              ],
+            }),
+          }
+        );
 
         if (openaiResponse.ok) {
           const data = await openaiResponse.json();
-          const rawContent = data.choices?.[0]?.message?.content || '{}';
-          const cleaned = rawContent.replace(/```json/gi, '').replace(/```/g, '').trim();
+          const rawContent =
+            data.choices?.[0]?.message?.content || '{}';
+
+          const cleaned = rawContent
+            .replace(/```json/gi, '')
+            .replace(/```/g, '')
+            .trim();
+
           const parsed = JSON.parse(cleaned);
 
           return res.json({
             provider: 'OPENAI_GPT_4O_MINI',
-            reasoning: parsed.reasoning || 'Evaluated via OpenAI GPT-4o-mini',
+            reasoning:
+              parsed.reasoning ||
+              'Evaluated via OpenAI GPT-4o-mini',
             selectedTool: parsed.selectedTool || null,
             toolParameters: parsed.toolParameters || {},
             isTaskComplete: Boolean(parsed.isTaskComplete),
-            finalResponseToUser: parsed.finalResponseToUser || null,
+            finalResponseToUser:
+              parsed.finalResponseToUser || null,
           });
         }
+
+        console.warn(
+          'OpenAI returned HTTP error:',
+          openaiResponse.status
+        );
       } catch (openAiErr: any) {
-        console.warn('OpenAI request failed, falling through to Gemini/Free AI:', openAiErr?.message);
+        console.warn(
+          'OpenAI request failed:',
+          openAiErr?.message
+        );
       }
     }
 
-    // 2. Try Gemini if key is available
-    const apiKey = geminiApiKey || process.env.GEMINI_API_KEY;
-    const shouldTryGemini = (preferredProvider === 'gemini' || !preferredProvider || preferredProvider === 'auto') && apiKey;
+    // 3. Gemini Provider
+    const apiKey =
+      geminiApiKey || process.env.GEMINI_API_KEY;
+
+    const shouldTryGemini =
+      (preferredProvider === 'gemini' ||
+        !preferredProvider ||
+        preferredProvider === 'auto') &&
+      Boolean(apiKey);
 
     if (shouldTryGemini) {
       try {
         const ai = new GoogleGenAI({ apiKey });
+
         const prompt = `
 ${systemPrompt || 'You are NEXORA, a voice-controlled accessibility agent.'}
 
@@ -116,86 +260,134 @@ Do NOT wrap in markdown code fences. Return valid JSON only.
         });
 
         const text = response.text || '';
-        const cleaned = text.trim().replace(/^```json/i, '').replace(/^```/i, '').replace(/```$/i, '').trim();
+
+        const cleaned = text
+          .trim()
+          .replace(/^```json/i, '')
+          .replace(/^```/i, '')
+          .replace(/```$/i, '')
+          .trim();
+
         const parsed = JSON.parse(cleaned);
 
         return res.json({
           provider: 'GEMINI_SERVER_API',
-          reasoning: parsed.reasoning || 'Step evaluated by Gemini 3.8 Flash',
+          reasoning:
+            parsed.reasoning ||
+            'Step evaluated by Gemini',
           selectedTool: parsed.selectedTool || null,
           toolParameters: parsed.toolParameters || {},
           isTaskComplete: Boolean(parsed.isTaskComplete),
-          finalResponseToUser: parsed.finalResponseToUser || null,
+          finalResponseToUser:
+            parsed.finalResponseToUser || null,
         });
       } catch (geminiError: any) {
-        console.warn('Gemini API request failed, using intelligent free local reasoner:', geminiError?.message);
+        console.warn(
+          'Gemini API request failed:',
+          geminiError?.message
+        );
       }
     }
 
-    // 3. Free High-Performance Autonomous ReAct Reasoner for ALL users (100% Free, Zero Setup)
-    const fallbackPlan = generateLocalPlan(userQuery, currentContextState, availableToolsJson);
+    // 4. Free Local Fallback
+    const fallbackPlan = generateLocalPlan(
+      userQuery,
+      currentContextState,
+      availableToolsJson
+    );
+
     return res.json({
       provider: 'FREE_AUTONOMOUS_NEURAL_REASONER',
       ...fallbackPlan,
     });
   } catch (err: any) {
+    console.error('Plan generation failed:', err);
+
     return res.status(500).json({
       error: 'Plan generation failed',
       reasoning: `Server error: ${err?.message}`,
       selectedTool: null,
       toolParameters: {},
       isTaskComplete: true,
-      finalResponseToUser: 'AI service-e somossa hocche. Please try again.',
+      finalResponseToUser:
+        'AI service-e somossa hocche. Please try again.',
     });
   }
 });
 
-function generateLocalPlan(query: string = '', contextState: string = '', toolsJson: string = '') {
+function generateLocalPlan(
+  query: string = '',
+  contextState: string = '',
+  toolsJson: string = ''
+) {
   const q = query.toLowerCase();
   const lowerContext = contextState.toLowerCase();
 
-  // 0. CONVERSATIONAL & CHAT RESPONSES (User speaks or asks anything)
-  if (q.includes('কেমন আছো') || q.includes('kemon acho') || q.includes('how are you')) {
+  // 0. Conversational Responses
+  if (
+    q.includes('কেমন আছো') ||
+    q.includes('kemon acho') ||
+    q.includes('how are you')
+  ) {
     return {
       reasoning: 'User asked pleasantry greeting.',
       selectedTool: null,
       toolParameters: {},
       isTaskComplete: true,
-      finalResponseToUser: 'আমি অনেক ভালো আছি! নেক্সোরা সার্বক্ষণিক প্রস্তুত। আপনি কী করতে চান বলুন?',
+      finalResponseToUser:
+        'আমি অনেক ভালো আছি! নেক্সোরা সার্বক্ষণিক প্রস্তুত। আপনি কী করতে চান বলুন?',
     };
   }
 
-  if (q.includes('who are you') || q.includes('তুমি কে') || q.includes('tumi ke') || q.includes('what is nexora')) {
+  if (
+    q.includes('who are you') ||
+    q.includes('তুমি কে') ||
+    q.includes('tumi ke') ||
+    q.includes('what is nexora')
+  ) {
     return {
       reasoning: 'User asked about Nexora identity.',
       selectedTool: null,
       toolParameters: {},
       isTaskComplete: true,
-      finalResponseToUser: 'আমি নেক্সোরা (NEXORA) — আপনার ভয়েস-কন্ট্রোল্ড অটোনোমাস এজেন্ট। আপনি মুখে যা বলবেন, আমি ফোনে সেই কাজ সরাসরি সম্পূর্ণ করে দেব।',
+      finalResponseToUser:
+        'আমি নেক্সোরা (NEXORA) — আপনার AI assistant।',
     };
   }
 
-  if (q.includes('কি করতে পারো') || q.includes('what can you do') || q.includes('help') || q.includes('সাহায্য')) {
+  if (
+    q.includes('কি করতে পারো') ||
+    q.includes('what can you do') ||
+    q.includes('help') ||
+    q.includes('সাহায্য')
+  ) {
     return {
       reasoning: 'User requested capability overview.',
       selectedTool: null,
       toolParameters: {},
       isTaskComplete: true,
-      finalResponseToUser: 'আমি ফোন কল ধরতে ও কাটতে পারি, যেকোনো তথ্য সার্চ করতে পারি, নতুন নোট তৈরি, পরিবর্তন ও মুছতে পারি এবং হোয়াটসঅ্যাপ ও সেটিংস হ্যান্ডস-ফ্রি কন্ট্রোল করতে পারি।',
+      finalResponseToUser:
+        'আমি AI assistant হিসেবে আপনার নির্দেশ বুঝে সাহায্য করতে পারি। বাস্তব Android control-এর জন্য প্রয়োজনীয় native permissions ও features চালু থাকতে হবে।',
     };
   }
 
-  if (q.includes('ধন্যবাদ') || q.includes('thank you') || q.includes('thanks') || q.includes('shukriya')) {
+  if (
+    q.includes('ধন্যবাদ') ||
+    q.includes('thank you') ||
+    q.includes('thanks') ||
+    q.includes('shukriya')
+  ) {
     return {
       reasoning: 'User expressed gratitude.',
       selectedTool: null,
       toolParameters: {},
       isTaskComplete: true,
-      finalResponseToUser: 'আপনাকে অনেক ধন্যবাদ! আমি সব সময় আপনার সেবায় প্রস্তুত।',
+      finalResponseToUser:
+        'আপনাকে অনেক ধন্যবাদ! আমি সাহায্য করতে প্রস্তুত।',
     };
   }
 
-  // 1. CALL ACTIONS: Answer, Cut / Reject, Dial
+  // 1. Call Actions
   if (
     q.includes('answer call') ||
     q.includes('call dhoro') ||
@@ -206,11 +398,12 @@ function generateLocalPlan(query: string = '', contextState: string = '', toolsJ
     q.includes('accept call')
   ) {
     return {
-      reasoning: 'User requested answering the active incoming phone call.',
+      reasoning: 'User requested answering an incoming call.',
       selectedTool: 'answer_call',
       toolParameters: {},
       isTaskComplete: true,
-      finalResponseToUser: 'Call answer kora holo. Kotha bolun! (Call answered)',
+      finalResponseToUser:
+        'কল ধরার অনুরোধটি গ্রহণ করা হয়েছে।',
     };
   }
 
@@ -224,199 +417,342 @@ function generateLocalPlan(query: string = '', contextState: string = '', toolsJ
     q.includes('disconnect')
   ) {
     return {
-      reasoning: 'User requested cutting or rejecting the phone call.',
+      reasoning: 'User requested ending a call.',
       selectedTool: 'cut_call',
       toolParameters: {},
       isTaskComplete: true,
-      finalResponseToUser: 'Call kete dewa holo. (Call cut/rejected)',
+      finalResponseToUser:
+        'কল শেষ করার অনুরোধটি গ্রহণ করা হয়েছে।',
     };
   }
 
-  if (q.includes('call') || q.includes('ফোন দাও') || q.includes('ডায়াল')) {
-    const contactMatch = query.match(/(?:call|phone)\s+([a-zA-Z0-9\s]+)/i);
-    const target = contactMatch && contactMatch[1] ? contactMatch[1].trim() : 'Rahim Chowdhury';
+  if (
+    q.includes('call') ||
+    q.includes('ফোন দাও') ||
+    q.includes('ডায়াল')
+  ) {
+    const contactMatch = query.match(
+      /(?:call|phone)\s+([a-zA-Z0-9\s]+)/i
+    );
+
+    const target =
+      contactMatch && contactMatch[1]
+        ? contactMatch[1].trim()
+        : '';
+
     return {
-      reasoning: `Placing outgoing phone call to ${target}.`,
+      reasoning: `Calling action requested for ${target || 'unknown contact'}.`,
       selectedTool: 'make_call',
-      toolParameters: { contactName: target },
-      isTaskComplete: true,
-      finalResponseToUser: `${target}-ke call kora hocche...`,
+      toolParameters: {
+        contactName: target,
+      },
+      isTaskComplete: false,
+      finalResponseToUser:
+        'কল করার আগে contact নিশ্চিত করতে হবে।',
     };
   }
 
-  // 2. SEARCH ACTIONS
-  if (q.includes('search') || q.includes('খোঁজ') || q.includes('khujo') || q.includes('google')) {
-    const term = query.replace(/(?:search for|search|খোঁজ|khujo|google|please)/gi, '').trim();
+  // 2. Search Actions
+  if (
+    q.includes('search') ||
+    q.includes('খোঁজ') ||
+    q.includes('khujo') ||
+    q.includes('google')
+  ) {
+    const term = query
+      .replace(
+        /(?:search for|search|খোঁজ|khujo|google|please)/gi,
+        ''
+      )
+      .trim();
+
     return {
-      reasoning: `Searching information for "${term}".`,
+      reasoning: `Search requested for "${term}".`,
       selectedTool: 'search_query',
-      toolParameters: { query: term || 'Nexora updates' },
-      isTaskComplete: true,
-      finalResponseToUser: `"${term || 'Query'}" search kora hoyeche.`,
+      toolParameters: {
+        query: term || query,
+      },
+      isTaskComplete: false,
+      finalResponseToUser:
+        'সার্চের অনুরোধটি গ্রহণ করা হয়েছে।',
     };
   }
 
-  // 3. CREATE ACTIONS (Create note, task, contact)
-  if (q.includes('create') || q.includes('add note') || q.includes('নতুন নোট') || q.includes('not likho') || q.includes('make note')) {
-    const noteMatch = query.match(/(?:note|নোট|create|add)\s+["']?([^"']+)["']?/i);
-    const noteText = noteMatch && noteMatch[1] ? noteMatch[1].trim() : 'Urgent memo from voice';
+  // 3. Create Actions
+  if (
+    q.includes('create') ||
+    q.includes('add note') ||
+    q.includes('নতুন নোট') ||
+    q.includes('not likho') ||
+    q.includes('make note')
+  ) {
+    const noteMatch = query.match(
+      /(?:note|নোট|create|add)\s+["']?([^"']+)["']?/i
+    );
+
+    const noteText =
+      noteMatch && noteMatch[1]
+        ? noteMatch[1].trim()
+        : query;
+
     return {
-      reasoning: `Creating new note with content: "${noteText}".`,
+      reasoning: `Creating note: "${noteText}".`,
       selectedTool: 'create_item',
-      toolParameters: { type: 'note', content: noteText },
-      isTaskComplete: true,
-      finalResponseToUser: `Notun note toiri kora holo: "${noteText}"`,
+      toolParameters: {
+        type: 'note',
+        content: noteText,
+      },
+      isTaskComplete: false,
+      finalResponseToUser:
+        'নোট তৈরির অনুরোধটি গ্রহণ করা হয়েছে।',
     };
   }
 
-  // 4. MODIFY ACTIONS (Update or edit)
-  if (q.includes('modify') || q.includes('change') || q.includes('update') || q.includes('বদলাও') || q.includes('edit')) {
+  // 4. Modify Actions
+  if (
+    q.includes('modify') ||
+    q.includes('change') ||
+    q.includes('update') ||
+    q.includes('বদলাও') ||
+    q.includes('edit')
+  ) {
     return {
-      reasoning: 'Modifying selected item based on user voice command.',
+      reasoning: 'Modify action requested.',
       selectedTool: 'modify_item',
-      toolParameters: { target: 'Active Item', newValue: 'Updated value' },
-      isTaskComplete: true,
-      finalResponseToUser: 'Item safolbhabe modify kora holo.',
+      toolParameters: {
+        target: '',
+        newValue: '',
+      },
+      isTaskComplete: false,
+      finalResponseToUser:
+        'কোন item পরিবর্তন করতে হবে তা জানতে চাই।',
     };
   }
 
-  // 5. DELETE ACTIONS (Delete note, message, data)
-  if (q.includes('delete') || q.includes('remove') || q.includes('মুছে ফেলো') || q.includes('kete felo')) {
+  // 5. Delete Actions
+  if (
+    q.includes('delete') ||
+    q.includes('remove') ||
+    q.includes('মুছে ফেলো') ||
+    q.includes('kete felo')
+  ) {
     return {
-      reasoning: 'Deleting specified item safely as requested.',
+      reasoning: 'Delete action requested.',
       selectedTool: 'delete_item',
-      toolParameters: { target: 'Note Item' },
-      isTaskComplete: true,
-      finalResponseToUser: 'Item muche fela holo. (Deleted successfully)',
+      toolParameters: {
+        target: '',
+      },
+      isTaskComplete: false,
+      finalResponseToUser:
+        'কোন item মুছতে হবে তা নিশ্চিত করতে হবে।',
     };
   }
 
-  // 6. ARRANGE ACTIONS (Sort, manage, organize)
-  if (q.includes('arrange') || q.includes('sort') || q.includes('manage') || q.includes('সাজাও') || q.includes('organize')) {
+  // 6. Arrange Actions
+  if (
+    q.includes('arrange') ||
+    q.includes('sort') ||
+    q.includes('manage') ||
+    q.includes('সাজাও') ||
+    q.includes('organize')
+  ) {
     return {
-      reasoning: 'Arranging and sorting items in order.',
+      reasoning: 'Arrange action requested.',
       selectedTool: 'arrange_items',
-      toolParameters: { sortBy: 'priority' },
-      isTaskComplete: true,
-      finalResponseToUser: 'Sob items sundor bhabe arrange kora holo.',
+      toolParameters: {
+        sortBy: 'priority',
+      },
+      isTaskComplete: false,
+      finalResponseToUser:
+        'Arrange করার অনুরোধটি গ্রহণ করা হয়েছে।',
     };
   }
 
-  // 7. APP SWITCHING
-  if (q.includes('whatsapp') || q.includes('হোয়াটসঅ্যাপ')) {
-    if (!lowerContext.includes('whatsapp') && !lowerContext.includes('recent conversations')) {
+  // 7. App Switching
+  if (
+    q.includes('whatsapp') ||
+    q.includes('হোয়াটসঅ্যাপ')
+  ) {
+    if (
+      !lowerContext.includes('whatsapp') &&
+      !lowerContext.includes('recent conversations')
+    ) {
       return {
-        reasoning: 'User wants to open WhatsApp and current screen does not show WhatsApp UI.',
+        reasoning: 'WhatsApp opening requested.',
         selectedTool: 'open_app',
-        toolParameters: { packageName: 'com.whatsapp' },
+        toolParameters: {
+          packageName: 'com.whatsapp',
+        },
         isTaskComplete: false,
-        finalResponseToUser: 'WhatsApp kholchi.',
+        finalResponseToUser:
+          'WhatsApp খোলার অনুরোধটি গ্রহণ করা হয়েছে।',
       };
     }
   }
 
-  if (q.includes('setting') || q.includes('সেটিংস')) {
-    if (!lowerContext.includes('settings') && !lowerContext.includes('wi-fi')) {
+  if (
+    q.includes('setting') ||
+    q.includes('সেটিংস')
+  ) {
+    if (
+      !lowerContext.includes('settings') &&
+      !lowerContext.includes('wi-fi')
+    ) {
       return {
-        reasoning: 'User requested system settings.',
+        reasoning: 'Settings opening requested.',
         selectedTool: 'open_app',
-        toolParameters: { packageName: 'com.android.settings' },
+        toolParameters: {
+          packageName: 'com.android.settings',
+        },
         isTaskComplete: false,
-        finalResponseToUser: 'Settings open korchi.',
+        finalResponseToUser:
+          'Settings খোলার অনুরোধটি গ্রহণ করা হয়েছে।',
       };
     }
   }
 
-  if (q.includes('contact') || q.includes('যোগাযোগ') || q.includes('ফোন')) {
+  if (
+    q.includes('contact') ||
+    q.includes('যোগাযোগ') ||
+    q.includes('ফোন')
+  ) {
     if (!lowerContext.includes('contacts')) {
       return {
-        reasoning: 'User requested contacts application.',
+        reasoning: 'Contacts opening requested.',
         selectedTool: 'open_app',
-        toolParameters: { packageName: 'com.google.android.contacts' },
+        toolParameters: {
+          packageName: 'com.google.android.contacts',
+        },
         isTaskComplete: false,
-        finalResponseToUser: 'Contacts open korchi.',
+        finalResponseToUser:
+          'Contacts খোলার অনুরোধটি গ্রহণ করা হয়েছে।',
       };
     }
   }
 
-  if (q.includes('note') || q.includes('নোট')) {
+  if (
+    q.includes('note') ||
+    q.includes('নোট')
+  ) {
     if (!lowerContext.includes('notes')) {
       return {
-        reasoning: 'User requested notes application.',
+        reasoning: 'Notes opening requested.',
         selectedTool: 'open_app',
-        toolParameters: { packageName: 'com.nexora.notes' },
+        toolParameters: {
+          packageName: 'com.nexora.notes',
+        },
         isTaskComplete: false,
-        finalResponseToUser: 'Notes app kholchi.',
+        finalResponseToUser:
+          'Notes খোলার অনুরোধটি গ্রহণ করা হয়েছে।',
       };
     }
   }
 
-  // 8. TYPING TEXT
-  if (q.includes('type') || q.includes('likho') || q.includes('লিখো') || q.includes('send') || q.includes('search') || q.includes('খোঁজ')) {
-    let textToType = '';
-    const match = query.match(/(?:type|likho|লিখো|search|khujo|search for|text)\s+["']?([^"']+)["']?/i);
-    if (match && match[1]) {
-      textToType = match[1].trim();
-    } else {
-      textToType = query.replace(/(?:type|likho|লিখো|search|please)/gi, '').trim();
-    }
+  // 8. Typing Text
+  if (
+    q.includes('type') ||
+    q.includes('likho') ||
+    q.includes('লিখো') ||
+    q.includes('send') ||
+    q.includes('খোঁজ')
+  ) {
+    const match = query.match(
+      /(?:type|likho|লিখো|text)\s+["']?([^"']+)["']?/i
+    );
+
+    const textToType =
+      match && match[1] ? match[1].trim() : '';
 
     if (textToType) {
       return {
-        reasoning: `Found editable context. Typing '${textToType}' into active input field.`,
+        reasoning: 'Typing action requested.',
         selectedTool: 'type_text',
-        toolParameters: { text: textToType, fieldLabel: 'Search' },
+        toolParameters: {
+          text: textToType,
+          fieldLabel: 'Input',
+        },
         isTaskComplete: false,
-        finalResponseToUser: `'${textToType}' type kora hocche.`,
+        finalResponseToUser:
+          'Text লেখার অনুরোধটি গ্রহণ করা হয়েছে।',
       };
     }
   }
 
-  // 9. CLICK ELEMENT
+  // 9. Click Element
   const screenLines = contextState.split('\n');
+
   for (const line of screenLines) {
-    if (line.includes('[clickable]') || line.includes('[text]')) {
-      const label = line.replace(/.*\[(clickable|text)\]\s*/i, '').trim();
-      if (label && label.length > 1 && q.includes(label.toLowerCase())) {
+    if (
+      line.includes('[clickable]') ||
+      line.includes('[text]')
+    ) {
+      const label = line
+        .replace(/.*\[(clickable|text)\]\s*/i, '')
+        .trim();
+
+      if (
+        label &&
+        label.length > 1 &&
+        q.includes(label.toLowerCase())
+      ) {
         return {
-          reasoning: `Matched screen target "${label}" with user instruction "${query}".`,
+          reasoning: `Matched screen target "${label}".`,
           selectedTool: 'click_element',
-          toolParameters: { targetText: label },
+          toolParameters: {
+            targetText: label,
+          },
           isTaskComplete: false,
-          finalResponseToUser: `"${label}" e click korchi.`,
+          finalResponseToUser:
+            `"${label}" নির্বাচন করার অনুরোধটি গ্রহণ করা হয়েছে।`,
         };
       }
     }
   }
 
-  // 10. SCROLL
-  if (q.includes('scroll down') || q.includes('niche namo') || q.includes('নিচে') || q.includes('scroll')) {
+  // 10. Scroll
+  if (
+    q.includes('scroll down') ||
+    q.includes('niche namo') ||
+    q.includes('নিচে') ||
+    q.includes('scroll')
+  ) {
     return {
-      reasoning: 'Instruction indicates scrolling down.',
+      reasoning: 'Scroll down requested.',
       selectedTool: 'scroll_screen',
-      toolParameters: { direction: 'FORWARD' },
+      toolParameters: {
+        direction: 'FORWARD',
+      },
       isTaskComplete: false,
-      finalResponseToUser: 'Screen scroll kora holo.',
+      finalResponseToUser:
+        'Scroll করার অনুরোধটি গ্রহণ করা হয়েছে।',
     };
   }
 
-  if (q.includes('scroll up') || q.includes('upore utho') || q.includes('উপরে')) {
+  if (
+    q.includes('scroll up') ||
+    q.includes('upore utho') ||
+    q.includes('উপরে')
+  ) {
     return {
-      reasoning: 'Instruction indicates scrolling up.',
+      reasoning: 'Scroll up requested.',
       selectedTool: 'scroll_screen',
-      toolParameters: { direction: 'BACKWARD' },
+      toolParameters: {
+        direction: 'BACKWARD',
+      },
       isTaskComplete: false,
-      finalResponseToUser: 'Screen upore scroll kora holo.',
+      finalResponseToUser:
+        'উপরে scroll করার অনুরোধটি গ্রহণ করা হয়েছে।',
     };
   }
 
-  // Default completed
+  // Default response
   return {
-    reasoning: 'Task instructions fulfilled or goal reached with available UI state.',
+    reasoning: 'No matching local action was found.',
     selectedTool: null,
     toolParameters: {},
     isTaskComplete: true,
-    finalResponseToUser: 'Kaaj-ta hoye gechhe! (Task completed successfully)',
+    finalResponseToUser:
+      'আমি আপনার নির্দেশটি বুঝেছি। আরও একটু বিস্তারিত বলবেন?',
   };
 }
 
@@ -424,22 +760,33 @@ async function startServer() {
   const isDev = process.env.NODE_ENV !== 'production';
 
   if (isDev) {
-    const { createServer: createViteServer } = await import('vite');
+    const { createServer: createViteServer } =
+      await import('vite');
+
     const vite = await createViteServer({
-      server: { middlewareMode: true, host: '0.0.0.0', port },
+      server: {
+        middlewareMode: true,
+        host: '0.0.0.0',
+        port,
+      },
       appType: 'spa',
     });
+
     app.use(vite.middlewares);
   } else {
     const distPath = path.resolve(__dirname, 'dist');
+
     app.use(express.static(distPath));
+
     app.get('*', (_req, res) => {
       res.sendFile(path.resolve(distPath, 'index.html'));
     });
   }
 
   app.listen(port, '0.0.0.0', () => {
-    console.log(`NEXORA server running at http://0.0.0.0:${port}`);
+    console.log(
+      `NEXORA server running at http://0.0.0.0:${port}`
+    );
   });
 }
 

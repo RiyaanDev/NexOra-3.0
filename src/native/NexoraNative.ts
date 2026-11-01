@@ -43,6 +43,16 @@ export interface NexoraAccessibilitySettingsResult {
   message?: string;
 }
 
+// Screen metadata returned by Android Accessibility Service.
+export interface NexoraScreenInfo {
+  success: boolean;
+  connected: boolean;
+  packageName: string;
+  className: string;
+  eventType: number;
+  eventTime: number;
+}
+
 interface NexoraNativePlugin {
   getNativeInfo(): Promise<NexoraNativeInfo>;
 
@@ -55,6 +65,8 @@ interface NexoraNativePlugin {
   isAccessibilityServiceConnected(): Promise<NexoraAccessibilityStatus>;
 
   openAccessibilitySettings(): Promise<NexoraAccessibilitySettingsResult>;
+
+  getLastScreenInfo(): Promise<NexoraScreenInfo>;
 }
 
 const NexoraNative = registerPlugin<NexoraNativePlugin>(
@@ -116,4 +128,14 @@ export const openNexoraAccessibilitySettings =
     }
 
     return await NexoraNative.openAccessibilitySettings();
+  };
+
+// Get latest safe Android screen metadata.
+export const getNexoraScreenInfo =
+  async (): Promise<NexoraScreenInfo | null> => {
+    if (!Capacitor.isNativePlatform()) {
+      return null;
+    }
+
+    return await NexoraNative.getLastScreenInfo();
   };

@@ -45,6 +45,7 @@ import { ActivationModal } from './components/ActivationModal';
 import { AISettingsModal } from './components/AISettingsModal';
 import { FloatingOrb } from './components/FloatingOrb';
 import { SafetyRiskModal } from './components/SafetyRiskModal';
+import { NativeBridgeTest } from './components/NativeBridgeTest';
 
 export const App: React.FC = () => {
   const {

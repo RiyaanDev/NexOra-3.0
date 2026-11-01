@@ -7,36 +7,37 @@ import {
   launchNexoraApp,
   getNexoraAccessibilityStatus,
   openNexoraAccessibilitySettings,
+  getNexoraScreenInfo,
   isNexoraNativeAvailable,
   NexoraNativeInfo,
   NexoraInstalledApp,
+  NexoraScreenInfo,
 } from '../native/NexoraNative';
 
 export const NativeBridgeTest: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [checkingAccessibility, setCheckingAccessibility] = useState(false);
-  const [openingAccessibilitySettings, setOpeningAccessibilitySettings] =
-    useState(false);
+  const [openingAccessibilitySettings, setOpeningAccessibilitySettings] = useState(false);
+  const [checkingScreen, setCheckingScreen] = useState(false);
 
   const [launchingPackage, setLaunchingPackage] = useState('');
 
   const [info, setInfo] = useState<NexoraNativeInfo | null>(null);
   const [apps, setApps] = useState<NexoraInstalledApp[]>([]);
+  const [screenInfo, setScreenInfo] = useState<NexoraScreenInfo | null>(null);
 
-  const [accessibilityConnected, setAccessibilityConnected] =
-    useState<boolean | null>(null);
+  const [accessibilityConnected, setAccessibilityConnected] = useState<boolean | null>(null);
 
   const [error, setError] = useState('');
   const [appError, setAppError] = useState('');
   const [accessibilityError, setAccessibilityError] = useState('');
+  const [screenError, setScreenError] = useState('');
 
   const [launchMessage, setLaunchMessage] = useState('');
   const [settingsMessage, setSettingsMessage] = useState('');
-
   const [search, setSearch] = useState('');
 
-  // Test Android Native Bridge
   const testBridge = async () => {
     setLoading(true);
     setError('');
@@ -44,9 +45,7 @@ export const NativeBridgeTest: React.FC = () => {
 
     try {
       if (!isNexoraNativeAvailable()) {
-        throw new Error(
-          'Android Native environment পাওয়া যায়নি। APK থেকে পরীক্ষা করো।'
-        );
+        throw new Error('Android Native environment পাওয়া যায়নি। APK থেকে পরীক্ষা করো।');
       }
 
       const result = await getNexoraNativeInfo();
@@ -57,47 +56,37 @@ export const NativeBridgeTest: React.FC = () => {
 
       setInfo(result);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Unknown error'
-      );
+      setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
   };
 
-  // Check Accessibility Service Connection
   const checkAccessibility = async () => {
     setCheckingAccessibility(true);
     setAccessibilityError('');
 
     try {
       if (!isNexoraNativeAvailable()) {
-        throw new Error(
-          'Android APK থেকে Accessibility status পরীক্ষা করো।'
-        );
+        throw new Error('Android APK থেকে Accessibility status পরীক্ষা করো।');
       }
 
       const result = await getNexoraAccessibilityStatus();
 
       if (!result || !result.success) {
-        throw new Error(
-          'Accessibility status পাওয়া যায়নি।'
-        );
+        throw new Error('Accessibility status পাওয়া যায়নি।');
       }
 
       setAccessibilityConnected(result.connected);
     } catch (err) {
       setAccessibilityError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to check Accessibility status.'
+        err instanceof Error ? err.message : 'Unable to check Accessibility status.'
       );
     } finally {
       setCheckingAccessibility(false);
     }
   };
 
-  // Open Android Accessibility Settings
   const openAccessibilitySettings = async () => {
     setOpeningAccessibilitySettings(true);
     setSettingsMessage('');
@@ -105,35 +94,25 @@ export const NativeBridgeTest: React.FC = () => {
 
     try {
       if (!isNexoraNativeAvailable()) {
-        throw new Error(
-          'Android APK থেকে এই ফিচারটি ব্যবহার করো।'
-        );
+        throw new Error('Android APK থেকে এই ফিচারটি ব্যবহার করো।');
       }
 
       const result = await openNexoraAccessibilitySettings();
 
       if (!result || !result.success) {
-        throw new Error(
-          result?.message ||
-            'Unable to open Accessibility Settings.'
-        );
+        throw new Error(result?.message || 'Unable to open Accessibility Settings.');
       }
 
-      setSettingsMessage(
-        'Android Accessibility Settings opened. Enable Nexora manually.'
-      );
+      setSettingsMessage('Android Accessibility Settings opened. Enable Nexora manually.');
     } catch (err) {
       setAccessibilityError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to open Accessibility Settings.'
+        err instanceof Error ? err.message : 'Unable to open Accessibility Settings.'
       );
     } finally {
       setOpeningAccessibilitySettings(false);
     }
   };
 
-  // Scan Installed Apps
   const scanInstalledApps = async () => {
     setScanning(true);
     setAppError('');
@@ -142,30 +121,23 @@ export const NativeBridgeTest: React.FC = () => {
 
     try {
       if (!isNexoraNativeAvailable()) {
-        throw new Error(
-          'Android APK থেকে Installed Apps Scanner পরীক্ষা করো।'
-        );
+        throw new Error('Android APK থেকে Installed Apps Scanner পরীক্ষা করো।');
       }
 
       const result = await getNexoraInstalledApps();
 
       if (!result || !result.success) {
-        throw new Error(
-          result?.message || 'Installed Apps scan failed.'
-        );
+        throw new Error(result?.message || 'Installed Apps scan failed.');
       }
 
       setApps(result.apps || []);
     } catch (err) {
-      setAppError(
-        err instanceof Error ? err.message : 'Unable to scan apps'
-      );
+      setAppError(err instanceof Error ? err.message : 'Unable to scan apps');
     } finally {
       setScanning(false);
     }
   };
 
-  // Launch Selected App
   const openInstalledApp = async (app: NexoraInstalledApp) => {
     setLaunchingPackage(app.packageName);
     setAppError('');
@@ -173,34 +145,49 @@ export const NativeBridgeTest: React.FC = () => {
 
     try {
       if (!isNexoraNativeAvailable()) {
-        throw new Error(
-          'Android APK থেকে App Launch পরীক্ষা করো।'
-        );
+        throw new Error('Android APK থেকে App Launch পরীক্ষা করো।');
       }
 
       const result = await launchNexoraApp(app.packageName);
 
       if (!result || !result.success) {
-        throw new Error(
-          result?.message || 'Unable to launch app.'
-        );
+        throw new Error(result?.message || 'Unable to launch app.');
       }
 
-      setLaunchMessage(
-        `${app.appName} launch requested.`
-      );
+      setLaunchMessage(`${app.appName} launch requested.`);
     } catch (err) {
-      setAppError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to launch app.'
-      );
+      setAppError(err instanceof Error ? err.message : 'Unable to launch app.');
     } finally {
       setLaunchingPackage('');
     }
   };
 
-  // Device Information Row
+  // Read safe screen metadata from Android Accessibility Service.
+  const checkScreenMetadata = async () => {
+    setCheckingScreen(true);
+    setScreenError('');
+
+    try {
+      if (!isNexoraNativeAvailable()) {
+        throw new Error('এই ফিচারটি Android APK-তে পরীক্ষা করতে হবে।');
+      }
+
+      const result = await getNexoraScreenInfo();
+
+      if (!result || !result.success) {
+        throw new Error('Screen metadata পাওয়া যায়নি।');
+      }
+
+      setScreenInfo(result);
+    } catch (err) {
+      setScreenError(
+        err instanceof Error ? err.message : 'Unable to read screen metadata.'
+      );
+    } finally {
+      setCheckingScreen(false);
+    }
+  };
+
   const DeviceRow = ({
     label,
     value,
@@ -210,14 +197,10 @@ export const NativeBridgeTest: React.FC = () => {
   }) => (
     <div className="flex justify-between gap-3 border-b border-slate-800 py-2 last:border-0">
       <span className="text-slate-400">{label}</span>
-
-      <span className="text-white text-right break-all">
-        {value || 'Unknown'}
-      </span>
+      <span className="text-white text-right break-all">{value || 'Unknown'}</span>
     </div>
   );
 
-  // App Search Filter
   const filteredApps = apps.filter((app) => {
     const query = search.toLowerCase();
 
@@ -227,21 +210,41 @@ export const NativeBridgeTest: React.FC = () => {
     );
   });
 
+  const eventTypeName = (eventType: number): string => {
+    const eventNames: Record<number, string> = {
+      1: 'View Clicked',
+      2: 'View Long Clicked',
+      4: 'View Selected',
+      8: 'View Focused',
+      16: 'Window State Changed',
+      32: 'Notification State Changed',
+      64: 'View Hover Enter',
+      128: 'View Hover Exit',
+      256: 'Touch Exploration Gesture',
+      512: 'Window Content Changed',
+      4096: 'View Scrolled',
+    };
+
+    return eventNames[eventType] || `Event Code: ${eventType}`;
+  };
+
+  const formatEventTime = (timestamp: number): string => {
+    if (!timestamp || timestamp <= 0) return 'Not available';
+
+    return new Date(timestamp).toLocaleString();
+  };
+
   return (
     <div className="w-full rounded-2xl bg-slate-900 border border-slate-800 p-4 space-y-4">
 
-      {/* Header */}
       <div>
-        <h2 className="text-white font-bold">
-          Native Bridge Diagnostics
-        </h2>
-
+        <h2 className="text-white font-bold">Native Bridge Diagnostics</h2>
         <p className="text-xs text-slate-400 mt-1">
-          Android Device Information & Installed Applications
+          Android Device Intelligence & Native Controls
         </p>
       </div>
 
-      {/* Native Bridge Test */}
+      {/* Native Bridge */}
       <button
         type="button"
         onClick={testBridge}
@@ -251,14 +254,9 @@ export const NativeBridgeTest: React.FC = () => {
         {loading ? 'Testing...' : 'TEST NATIVE BRIDGE'}
       </button>
 
-      {/* Device Information */}
       {info && (
         <div className="rounded-xl bg-slate-950 p-3 space-y-1 text-sm">
-
-          <p className="text-emerald-400 font-bold mb-3">
-            Native Bridge Connected
-          </p>
-
+          <p className="text-emerald-400 font-bold mb-3">Native Bridge Connected</p>
           <DeviceRow label="Platform" value={info.platform} />
           <DeviceRow label="Manufacturer" value={info.manufacturer} />
           <DeviceRow label="Brand" value={info.brand} />
@@ -267,97 +265,106 @@ export const NativeBridgeTest: React.FC = () => {
           <DeviceRow label="Android Version" value={info.androidVersion} />
           <DeviceRow label="SDK Version" value={info.sdkVersion} />
           <DeviceRow label="Package Name" value={info.packageName} />
-
         </div>
       )}
 
-      {error && (
-        <p className="text-sm text-red-400 break-words">
-          {error}
-        </p>
-      )}
+      {error && <p className="text-sm text-red-400 break-words">{error}</p>}
 
-      {/* Accessibility Service */}
+      {/* Accessibility */}
       <div className="border-t border-slate-800 pt-4 space-y-3">
-
         <div>
-          <h3 className="text-white font-bold">
-            Accessibility Service
-          </h3>
-
+          <h3 className="text-white font-bold">Accessibility Service</h3>
           <p className="text-xs text-slate-400 mt-1">
             Manage and check Nexora Accessibility Service.
           </p>
         </div>
 
-        {/* Enable Accessibility */}
         <button
           type="button"
           onClick={openAccessibilitySettings}
           disabled={openingAccessibilitySettings}
           className="w-full rounded-xl bg-violet-500 text-white font-bold py-3 disabled:opacity-50"
         >
-          {openingAccessibilitySettings
-            ? 'Opening Settings...'
-            : 'ENABLE ACCESSIBILITY'}
+          {openingAccessibilitySettings ? 'Opening Settings...' : 'ENABLE ACCESSIBILITY'}
         </button>
 
         {settingsMessage && (
-          <p className="text-sm text-emerald-400 break-words">
-            {settingsMessage}
-          </p>
+          <p className="text-sm text-emerald-400 break-words">{settingsMessage}</p>
         )}
 
-        {/* Check Accessibility Status */}
         <button
           type="button"
           onClick={checkAccessibility}
           disabled={checkingAccessibility}
           className="w-full rounded-xl bg-emerald-500 text-slate-950 font-bold py-3 disabled:opacity-50"
         >
-          {checkingAccessibility
-            ? 'Checking...'
-            : 'CHECK ACCESSIBILITY STATUS'}
+          {checkingAccessibility ? 'Checking...' : 'CHECK ACCESSIBILITY STATUS'}
         </button>
 
         {accessibilityConnected !== null && (
           <div className="rounded-xl bg-slate-950 border border-slate-800 p-3">
-
-            {accessibilityConnected ? (
-              <p className="text-emerald-400 font-bold">
-                ● Accessibility Service Connected
-              </p>
-            ) : (
-              <p className="text-amber-400 font-bold">
-                ● Accessibility Service Not Connected
-              </p>
-            )}
-
+            <p className={accessibilityConnected ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+              {accessibilityConnected
+                ? '● Accessibility Service Connected'
+                : '● Accessibility Service Not Connected'}
+            </p>
             <p className="text-xs text-slate-400 mt-2">
               {accessibilityConnected
                 ? 'Nexora Accessibility Service is currently active.'
-                : 'Enable Nexora Accessibility Service from Android Settings, then check again.'}
+                : 'Enable Nexora from Android Accessibility Settings, then check again.'}
             </p>
-
           </div>
         )}
 
         {accessibilityError && (
-          <p className="text-sm text-red-400 break-words">
-            {accessibilityError}
+          <p className="text-sm text-red-400 break-words">{accessibilityError}</p>
+        )}
+      </div>
+
+      {/* Screen Metadata Viewer */}
+      <div className="border-t border-slate-800 pt-4 space-y-3">
+        <div>
+          <h3 className="text-white font-bold">Screen Metadata Viewer</h3>
+          <p className="text-xs text-slate-400 mt-1">
+            Reads foreground app and screen event metadata only. No screen text is collected.
           </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={checkScreenMetadata}
+          disabled={checkingScreen}
+          className="w-full rounded-xl bg-cyan-500 text-slate-950 font-bold py-3 disabled:opacity-50"
+        >
+          {checkingScreen ? 'Reading Screen...' : 'READ CURRENT SCREEN INFO'}
+        </button>
+
+        {screenInfo && (
+          <div className="rounded-xl bg-slate-950 border border-slate-800 p-3 space-y-1 text-sm">
+            <p className={screenInfo.connected ? 'text-emerald-400 font-bold mb-3' : 'text-amber-400 font-bold mb-3'}>
+              {screenInfo.connected ? '● Accessibility Connected' : '● Accessibility Not Connected'}
+            </p>
+
+            <DeviceRow label="Foreground Package" value={screenInfo.packageName || 'Not available'} />
+            <DeviceRow label="Screen / Activity" value={screenInfo.className || 'Not available'} />
+            <DeviceRow label="Event" value={eventTypeName(screenInfo.eventType)} />
+            <DeviceRow label="Event Time" value={formatEventTime(screenInfo.eventTime)} />
+
+            <p className="text-xs text-slate-500 pt-3">
+              Metadata only. Sensitive screen content is not displayed or stored.
+            </p>
+          </div>
         )}
 
+        {screenError && (
+          <p className="text-sm text-red-400 break-words">{screenError}</p>
+        )}
       </div>
 
       {/* Installed Applications */}
       <div className="border-t border-slate-800 pt-4 space-y-4">
-
         <div>
-          <h3 className="text-white font-bold">
-            Installed Applications
-          </h3>
-
+          <h3 className="text-white font-bold">Installed Applications</h3>
           <p className="text-xs text-slate-400 mt-1">
             Tap an app to open it on your Android device.
           </p>
@@ -372,26 +379,12 @@ export const NativeBridgeTest: React.FC = () => {
           {scanning ? 'Scanning Apps...' : 'SCAN INSTALLED APPS'}
         </button>
 
-        {appError && (
-          <p className="text-sm text-red-400 break-words">
-            {appError}
-          </p>
-        )}
-
-        {launchMessage && (
-          <p className="text-sm text-emerald-400 break-words">
-            {launchMessage}
-          </p>
-        )}
+        {appError && <p className="text-sm text-red-400 break-words">{appError}</p>}
+        {launchMessage && <p className="text-sm text-emerald-400 break-words">{launchMessage}</p>}
 
         {apps.length > 0 && (
           <div className="space-y-3">
-
-            <div className="flex items-center justify-between">
-              <p className="text-emerald-400 text-sm font-bold">
-                {apps.length} Apps Found
-              </p>
-            </div>
+            <p className="text-emerald-400 text-sm font-bold">{apps.length} Apps Found</p>
 
             <input
               type="text"
@@ -402,7 +395,6 @@ export const NativeBridgeTest: React.FC = () => {
             />
 
             <div className="max-h-96 overflow-y-auto space-y-2">
-
               {filteredApps.map((app) => (
                 <button
                   type="button"
@@ -411,7 +403,6 @@ export const NativeBridgeTest: React.FC = () => {
                   disabled={launchingPackage !== ''}
                   className="w-full flex items-center gap-3 text-left rounded-xl bg-slate-950 border border-slate-800 p-3 hover:border-violet-500 disabled:opacity-50"
                 >
-
                   {app.iconBase64 ? (
                     <img
                       src={app.iconBase64}
@@ -425,21 +416,13 @@ export const NativeBridgeTest: React.FC = () => {
                   )}
 
                   <div className="min-w-0 flex-1">
-                    <p className="text-white font-semibold truncate">
-                      {app.appName}
-                    </p>
-
-                    <p className="text-xs text-slate-400 break-all">
-                      {app.packageName}
-                    </p>
+                    <p className="text-white font-semibold truncate">{app.appName}</p>
+                    <p className="text-xs text-slate-400 break-all">{app.packageName}</p>
                   </div>
 
                   <span className="text-xs text-violet-400 font-bold shrink-0">
-                    {launchingPackage === app.packageName
-                      ? 'Opening...'
-                      : 'OPEN →'}
+                    {launchingPackage === app.packageName ? 'Opening...' : 'OPEN →'}
                   </span>
-
                 </button>
               ))}
 
@@ -448,11 +431,9 @@ export const NativeBridgeTest: React.FC = () => {
                   No matching apps found.
                 </p>
               )}
-
             </div>
           </div>
         )}
-
       </div>
     </div>
   );

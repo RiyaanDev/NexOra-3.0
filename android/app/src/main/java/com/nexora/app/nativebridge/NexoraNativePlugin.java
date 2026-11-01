@@ -156,6 +156,86 @@ public class NexoraNativePlugin extends Plugin {
         }
     }
 
+    @PluginMethod
+    public void launchApp(PluginCall call) {
+        try {
+            String packageName =
+                call.getString("packageName");
+
+            if (packageName == null ||
+                packageName.trim().isEmpty()) {
+                throw new Exception(
+                    "App package name is required."
+                );
+            }
+
+            PackageManager packageManager =
+                getContext().getPackageManager();
+
+            Intent launcherIntent = new Intent(
+                Intent.ACTION_MAIN
+            );
+
+            launcherIntent.addCategory(
+                Intent.CATEGORY_LAUNCHER
+            );
+
+            launcherIntent.setPackage(packageName);
+
+            ResolveInfo launchableApp =
+                packageManager.resolveActivity(
+                    launcherIntent,
+                    0
+                );
+
+            if (launchableApp == null ||
+                launchableApp.activityInfo == null) {
+                throw new Exception(
+                    "This app is not available to launch."
+                );
+            }
+
+            Intent launchIntent =
+                packageManager.getLaunchIntentForPackage(
+                    packageName
+                );
+
+            if (launchIntent == null) {
+                throw new Exception(
+                    "Launch activity not found."
+                );
+            }
+
+            launchIntent.addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK
+            );
+
+            getContext().startActivity(launchIntent);
+
+            JSObject result = new JSObject();
+
+            result.put("success", true);
+            result.put("packageName", packageName);
+            result.put("message", "App launch requested.");
+
+            call.resolve(result);
+
+        } catch (Exception error) {
+
+            JSObject result = new JSObject();
+
+            result.put("success", false);
+            result.put(
+                "message",
+                error.getMessage() != null
+                    ? error.getMessage()
+                    : "Unable to launch app."
+            );
+
+            call.resolve(result);
+        }
+    }
+
     private String getAppIcon(
         ResolveInfo resolveInfo,
         PackageManager packageManager

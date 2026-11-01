@@ -17,6 +17,7 @@ export interface NexoraInstalledApp {
   appName: string;
   packageName: string;
   activityName: string;
+  iconBase64: string;
 }
 
 export interface NexoraInstalledAppsResult {

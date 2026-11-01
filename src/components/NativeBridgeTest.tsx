@@ -6,6 +6,7 @@ import {
   getNexoraInstalledApps,
   launchNexoraApp,
   getNexoraAccessibilityStatus,
+  openNexoraAccessibilitySettings,
   isNexoraNativeAvailable,
   NexoraNativeInfo,
   NexoraInstalledApp,
@@ -15,6 +16,9 @@ export const NativeBridgeTest: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [checkingAccessibility, setCheckingAccessibility] = useState(false);
+  const [openingAccessibilitySettings, setOpeningAccessibilitySettings] =
+    useState(false);
+
   const [launchingPackage, setLaunchingPackage] = useState('');
 
   const [info, setInfo] = useState<NexoraNativeInfo | null>(null);
@@ -26,9 +30,13 @@ export const NativeBridgeTest: React.FC = () => {
   const [error, setError] = useState('');
   const [appError, setAppError] = useState('');
   const [accessibilityError, setAccessibilityError] = useState('');
+
   const [launchMessage, setLaunchMessage] = useState('');
+  const [settingsMessage, setSettingsMessage] = useState('');
+
   const [search, setSearch] = useState('');
 
+  // Test Android Native Bridge
   const testBridge = async () => {
     setLoading(true);
     setError('');
@@ -57,6 +65,7 @@ export const NativeBridgeTest: React.FC = () => {
     }
   };
 
+  // Check Accessibility Service Connection
   const checkAccessibility = async () => {
     setCheckingAccessibility(true);
     setAccessibilityError('');
@@ -88,6 +97,43 @@ export const NativeBridgeTest: React.FC = () => {
     }
   };
 
+  // Open Android Accessibility Settings
+  const openAccessibilitySettings = async () => {
+    setOpeningAccessibilitySettings(true);
+    setSettingsMessage('');
+    setAccessibilityError('');
+
+    try {
+      if (!isNexoraNativeAvailable()) {
+        throw new Error(
+          'Android APK থেকে এই ফিচারটি ব্যবহার করো।'
+        );
+      }
+
+      const result = await openNexoraAccessibilitySettings();
+
+      if (!result || !result.success) {
+        throw new Error(
+          result?.message ||
+            'Unable to open Accessibility Settings.'
+        );
+      }
+
+      setSettingsMessage(
+        'Android Accessibility Settings opened. Enable Nexora manually.'
+      );
+    } catch (err) {
+      setAccessibilityError(
+        err instanceof Error
+          ? err.message
+          : 'Unable to open Accessibility Settings.'
+      );
+    } finally {
+      setOpeningAccessibilitySettings(false);
+    }
+  };
+
+  // Scan Installed Apps
   const scanInstalledApps = async () => {
     setScanning(true);
     setAppError('');
@@ -119,6 +165,7 @@ export const NativeBridgeTest: React.FC = () => {
     }
   };
 
+  // Launch Selected App
   const openInstalledApp = async (app: NexoraInstalledApp) => {
     setLaunchingPackage(app.packageName);
     setAppError('');
@@ -126,7 +173,9 @@ export const NativeBridgeTest: React.FC = () => {
 
     try {
       if (!isNexoraNativeAvailable()) {
-        throw new Error('Android APK থেকে App Launch পরীক্ষা করো।');
+        throw new Error(
+          'Android APK থেকে App Launch পরীক্ষা করো।'
+        );
       }
 
       const result = await launchNexoraApp(app.packageName);
@@ -137,16 +186,21 @@ export const NativeBridgeTest: React.FC = () => {
         );
       }
 
-      setLaunchMessage(`${app.appName} launch requested.`);
+      setLaunchMessage(
+        `${app.appName} launch requested.`
+      );
     } catch (err) {
       setAppError(
-        err instanceof Error ? err.message : 'Unable to launch app.'
+        err instanceof Error
+          ? err.message
+          : 'Unable to launch app.'
       );
     } finally {
       setLaunchingPackage('');
     }
   };
 
+  // Device Information Row
   const DeviceRow = ({
     label,
     value,
@@ -156,12 +210,14 @@ export const NativeBridgeTest: React.FC = () => {
   }) => (
     <div className="flex justify-between gap-3 border-b border-slate-800 py-2 last:border-0">
       <span className="text-slate-400">{label}</span>
+
       <span className="text-white text-right break-all">
         {value || 'Unknown'}
       </span>
     </div>
   );
 
+  // App Search Filter
   const filteredApps = apps.filter((app) => {
     const query = search.toLowerCase();
 
@@ -174,6 +230,7 @@ export const NativeBridgeTest: React.FC = () => {
   return (
     <div className="w-full rounded-2xl bg-slate-900 border border-slate-800 p-4 space-y-4">
 
+      {/* Header */}
       <div>
         <h2 className="text-white font-bold">
           Native Bridge Diagnostics
@@ -184,6 +241,7 @@ export const NativeBridgeTest: React.FC = () => {
         </p>
       </div>
 
+      {/* Native Bridge Test */}
       <button
         type="button"
         onClick={testBridge}
@@ -193,6 +251,7 @@ export const NativeBridgeTest: React.FC = () => {
         {loading ? 'Testing...' : 'TEST NATIVE BRIDGE'}
       </button>
 
+      {/* Device Information */}
       {info && (
         <div className="rounded-xl bg-slate-950 p-3 space-y-1 text-sm">
 
@@ -218,6 +277,7 @@ export const NativeBridgeTest: React.FC = () => {
         </p>
       )}
 
+      {/* Accessibility Service */}
       <div className="border-t border-slate-800 pt-4 space-y-3">
 
         <div>
@@ -226,10 +286,29 @@ export const NativeBridgeTest: React.FC = () => {
           </h3>
 
           <p className="text-xs text-slate-400 mt-1">
-            Check whether Nexora Accessibility Service is connected.
+            Manage and check Nexora Accessibility Service.
           </p>
         </div>
 
+        {/* Enable Accessibility */}
+        <button
+          type="button"
+          onClick={openAccessibilitySettings}
+          disabled={openingAccessibilitySettings}
+          className="w-full rounded-xl bg-violet-500 text-white font-bold py-3 disabled:opacity-50"
+        >
+          {openingAccessibilitySettings
+            ? 'Opening Settings...'
+            : 'ENABLE ACCESSIBILITY'}
+        </button>
+
+        {settingsMessage && (
+          <p className="text-sm text-emerald-400 break-words">
+            {settingsMessage}
+          </p>
+        )}
+
+        {/* Check Accessibility Status */}
         <button
           type="button"
           onClick={checkAccessibility}
@@ -271,6 +350,7 @@ export const NativeBridgeTest: React.FC = () => {
 
       </div>
 
+      {/* Installed Applications */}
       <div className="border-t border-slate-800 pt-4 space-y-4">
 
         <div>

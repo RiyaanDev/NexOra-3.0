@@ -1,51 +1,53 @@
-name: Build Android APK
+
+name: Build NEXORA Android APK
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
-          java-version: '17'
+          distribution: zulu
+          java-version: '21'
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.5'
+      - name: Install dependencies
+        run: npm install
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      - name: Build web application
+        run: npm run build
 
-      - name: Restore stable debug keystore
-        env:
-          DEBUG_KEYSTORE_B64: ${{ secrets.DEBUG_KEYSTORE_B64 }}
+      - name: Create Android project
+        run: npx cap add android
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Build Android APK
+        working-directory: android
         run: |
-          if [ -z "$DEBUG_KEYSTORE_B64" ]; then
-            echo "DEBUG_KEYSTORE_B64 secret nei, default debug key use hobe"
-            exit 0
-          fi
-          mkdir -p ~/.android
-          echo "$DEBUG_KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
-      - name: Unit tests
-        run: ./gradlew testDebugUnitTest
-
-      - name: Build APK with Gradle
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: ./gradlew assembleDebug
-
-      - name: Upload APK Artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: nexora-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: NEXORA-debug-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

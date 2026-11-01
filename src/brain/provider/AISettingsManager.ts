@@ -15,7 +15,7 @@ const DEFAULT_SETTINGS: AISettings = {
   openAiApiKey: '',
   geminiApiKey: '',
   model: 'gpt-4o-mini',
-  adminMode: true,
+  adminMode: false,
 };
 
 class AISettingsManagerService {

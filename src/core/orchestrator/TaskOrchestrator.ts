@@ -1,3 +1,4 @@
+
 import { NexoraEventBus } from '../eventbus/NexoraEventBus';
 import { TaskStateManager } from '../state/TaskStateManager';
 import { ReActPlanner } from '../../brain/planner/ReActPlanner';
@@ -9,10 +10,15 @@ import { TaskState, TaskStepLog } from '../../types';
 
 export class TaskOrchestrator {
   private isCancelled = false;
-  private currentTaskId: number = 0;
+  private isDestroyed = false;
+  private currentTaskId = 0;
+
   private stepLogs: TaskStepLog[] = [];
-  private stepLogListeners: ((logs: TaskStepLog[]) => void)[] = [];
+  private stepLogListeners: Set<(logs: TaskStepLog[]) => void> =
+    new Set();
+
   private nodeParser = new UiNodeParser();
+  private unsubscribeEventBus: (() => void) | null = null;
 
   private static readonly MAX_STEPS = 8;
   private static readonly MAX_ELEMENTS = 60;
@@ -28,12 +34,15 @@ export class TaskOrchestrator {
   }
 
   private initEventSubscriber(): void {
-    NexoraEventBus.subscribe((event) => {
+    this.unsubscribeEventBus = NexoraEventBus.subscribe((event) => {
+      if (this.isDestroyed) return;
+
       switch (event.type) {
         case 'UserSpokenInput':
           this.cancelCurrent();
-          this.runTask(event.transcript);
+          void this.runTask(event.transcript);
           break;
+
         case 'StopRequested':
           this.cancelCurrent();
           this.taskStateManager.transitionTo(TaskState.IDLE);
@@ -44,151 +53,300 @@ export class TaskOrchestrator {
 
   cancelCurrent(): void {
     this.isCancelled = true;
+    this.currentTaskId++;
+  }
+
+  destroy(): void {
+    if (this.isDestroyed) return;
+
+    this.isDestroyed = true;
+    this.cancelCurrent();
+
+    this.unsubscribeEventBus?.();
+    this.unsubscribeEventBus = null;
+
+    this.stepLogListeners.clear();
   }
 
   getStepLogs(): TaskStepLog[] {
-    return this.stepLogs;
+    return [...this.stepLogs];
   }
 
   onStepLogs(fn: (logs: TaskStepLog[]) => void): () => void {
-    this.stepLogListeners.push(fn);
+    if (this.isDestroyed) return () => {};
+
+    this.stepLogListeners.add(fn);
+
+    try {
+      fn(this.getStepLogs());
+    } catch (error) {
+      console.error('TaskOrchestrator log listener error:', error);
+    }
+
     return () => {
-      this.stepLogListeners = this.stepLogListeners.filter((l) => l !== fn);
+      this.stepLogListeners.delete(fn);
     };
+  }
+
+  private notifyStepLogListeners(): void {
+    const snapshot = this.getStepLogs();
+
+    this.stepLogListeners.forEach((listener) => {
+      try {
+        listener(snapshot);
+      } catch (error) {
+        console.error('TaskOrchestrator log listener error:', error);
+      }
+    });
   }
 
   private addStepLog(log: TaskStepLog): void {
     this.stepLogs = [...this.stepLogs, log];
-    this.stepLogListeners.forEach((fn) => fn(this.stepLogs));
+    this.notifyStepLogListeners();
+  }
+
+  private isTaskActive(taskId: number): boolean {
+    return (
+      !this.isDestroyed &&
+      !this.isCancelled &&
+      this.currentTaskId === taskId
+    );
+  }
+
+  private getErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+      return error.message;
+    }
+
+    return String(error || 'Unknown error');
   }
 
   async runTask(query: string): Promise<void> {
+    if (this.isDestroyed) return;
+
     const taskId = ++this.currentTaskId;
+
     this.isCancelled = false;
     this.stepLogs = [];
-    this.stepLogListeners.forEach((fn) => fn([]));
+    this.notifyStepLogListeners();
 
-    this.taskStateManager.transitionTo(TaskState.PLANNING);
     const history: string[] = [];
 
-    for (let step = 1; step <= TaskOrchestrator.MAX_STEPS; step++) {
-      if (this.isCancelled || this.currentTaskId !== taskId) {
+    try {
+      if (!query || !query.trim()) {
+        this.taskStateManager.transitionTo(TaskState.FAILED);
         return;
       }
-
-      const screenDesc = this.describeScreen();
-      const plan = await this.planner.planNextStep(
-        query,
-        this.toolRegistry.getToolsJsonSchema(),
-        screenDesc,
-        history
-      );
-
-      if (this.isCancelled || this.currentTaskId !== taskId) return;
-
-      if (plan.finalResponseToUser && plan.finalResponseToUser.trim().length > 0) {
-        NexoraEventBus.emit({
-          type: 'SpeakFeedback',
-          text: plan.finalResponseToUser,
-        });
-      }
-
-      const toolName = plan.selectedTool?.trim() || null;
-
-      if (!toolName) {
-        this.addStepLog({
-          step,
-          reasoning: plan.reasoning,
-          timestamp: new Date().toLocaleTimeString(),
-          screenSummary: screenDesc.slice(0, 150),
-        });
-        this.taskStateManager.transitionTo(TaskState.COMPLETED);
-        return;
-      }
-
-      const tool = this.toolRegistry.getTool(toolName);
-      if (!tool) {
-        const msg = `Tool '${toolName}' does not exist`;
-        history.push(msg);
-        this.addStepLog({
-          step,
-          reasoning: plan.reasoning,
-          toolName,
-          parameters: plan.toolParameters,
-          result: { success: false, message: msg },
-          timestamp: new Date().toLocaleTimeString(),
-          screenSummary: screenDesc.slice(0, 150),
-        });
-        continue;
-      }
-
-      this.taskStateManager.transitionTo(TaskState.EXECUTING);
-
-      const canExecute = await this.riskGate.evaluateAndCanExecute(tool, plan.toolParameters);
-      if (this.isCancelled || this.currentTaskId !== taskId) return;
-
-      if (!canExecute) {
-        history.push(`User did not allow ${tool.name}`);
-        this.addStepLog({
-          step,
-          reasoning: plan.reasoning,
-          toolName: tool.name,
-          parameters: plan.toolParameters,
-          result: { success: false, message: `Blocked by RiskGate (${tool.riskLevel})` },
-          timestamp: new Date().toLocaleTimeString(),
-          screenSummary: screenDesc.slice(0, 150),
-        });
-        this.taskStateManager.transitionTo(TaskState.PLANNING);
-        continue;
-      }
-
-      const result = await tool.execute(plan.toolParameters);
-      history.push(result.success ? `${tool.name}: ${result.message}` : `${tool.name} failed: ${result.message}`);
-
-      this.addStepLog({
-        step,
-        reasoning: plan.reasoning,
-        toolName: tool.name,
-        parameters: plan.toolParameters,
-        result,
-        timestamp: new Date().toLocaleTimeString(),
-        screenSummary: screenDesc.slice(0, 150),
-      });
-
-      if (plan.isTaskComplete) {
-        this.taskStateManager.transitionTo(TaskState.COMPLETED);
-        return;
-      }
-
-      // Allow UI time to update after action
-      await new Promise((resolve) => setTimeout(resolve, TaskOrchestrator.STEP_DELAY_MS));
-      if (this.isCancelled || this.currentTaskId !== taskId) return;
 
       this.taskStateManager.transitionTo(TaskState.PLANNING);
-    }
 
-    NexoraEventBus.emit({
-      type: 'SpeakFeedback',
-      text: 'Kaaj-ta shesh korte parlam na.',
-    });
-    this.taskStateManager.transitionTo(TaskState.FAILED);
+      for (
+        let step = 1;
+        step <= TaskOrchestrator.MAX_STEPS;
+        step++
+      ) {
+        if (!this.isTaskActive(taskId)) return;
+
+        const screenDesc = this.describeScreen();
+
+        const plan = await this.planner.planNextStep(
+          query,
+          this.toolRegistry.getToolsJsonSchema(),
+          screenDesc,
+          history
+        );
+
+        if (!this.isTaskActive(taskId)) return;
+
+        if (
+          plan.finalResponseToUser &&
+          plan.finalResponseToUser.trim().length > 0
+        ) {
+          NexoraEventBus.emit({
+            type: 'SpeakFeedback',
+            text: plan.finalResponseToUser,
+          });
+        }
+
+        const toolName = plan.selectedTool?.trim() || null;
+
+        if (!toolName) {
+          this.addStepLog({
+            step,
+            reasoning: plan.reasoning || '',
+            timestamp: new Date().toLocaleTimeString(),
+            screenSummary: screenDesc.slice(0, 150),
+          });
+
+          this.taskStateManager.transitionTo(TaskState.COMPLETED);
+          return;
+        }
+
+        const tool = this.toolRegistry.getTool(toolName);
+
+        if (!tool) {
+          const message = `Tool '${toolName}' does not exist`;
+
+          history.push(message);
+
+          this.addStepLog({
+            step,
+            reasoning: plan.reasoning || '',
+            toolName,
+            parameters: plan.toolParameters,
+            result: {
+              success: false,
+              message,
+            },
+            timestamp: new Date().toLocaleTimeString(),
+            screenSummary: screenDesc.slice(0, 150),
+          });
+
+          continue;
+        }
+
+        this.taskStateManager.transitionTo(TaskState.EXECUTING);
+
+        const canExecute =
+          await this.riskGate.evaluateAndCanExecute(
+            tool,
+            plan.toolParameters
+          );
+
+        if (!this.isTaskActive(taskId)) return;
+
+        if (!canExecute) {
+          const message = `Blocked by RiskGate (${tool.riskLevel})`;
+
+          history.push(`User did not allow ${tool.name}`);
+
+          this.addStepLog({
+            step,
+            reasoning: plan.reasoning || '',
+            toolName: tool.name,
+            parameters: plan.toolParameters,
+            result: {
+              success: false,
+              message,
+            },
+            timestamp: new Date().toLocaleTimeString(),
+            screenSummary: screenDesc.slice(0, 150),
+          });
+
+          this.taskStateManager.transitionTo(TaskState.PLANNING);
+          continue;
+        }
+
+        const result = await tool.execute(
+          plan.toolParameters
+        );
+
+        if (!this.isTaskActive(taskId)) return;
+
+        history.push(
+          result.success
+            ? `${tool.name}: ${result.message}`
+            : `${tool.name} failed: ${result.message}`
+        );
+
+        this.addStepLog({
+          step,
+          reasoning: plan.reasoning || '',
+          toolName: tool.name,
+          parameters: plan.toolParameters,
+          result,
+          timestamp: new Date().toLocaleTimeString(),
+          screenSummary: screenDesc.slice(0, 150),
+        });
+
+        if (plan.isTaskComplete) {
+          this.taskStateManager.transitionTo(TaskState.COMPLETED);
+          return;
+        }
+
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, TaskOrchestrator.STEP_DELAY_MS);
+        });
+
+        if (!this.isTaskActive(taskId)) return;
+
+        this.taskStateManager.transitionTo(TaskState.PLANNING);
+      }
+
+      if (!this.isTaskActive(taskId)) return;
+
+      NexoraEventBus.emit({
+        type: 'SpeakFeedback',
+        text: 'Kaaj-ta shesh korte parlam na.',
+      });
+
+      this.taskStateManager.transitionTo(TaskState.FAILED);
+    } catch (error) {
+      if (!this.isTaskActive(taskId)) return;
+
+      const message = this.getErrorMessage(error);
+
+      console.error('TaskOrchestrator execution error:', error);
+
+      this.addStepLog({
+        step: this.stepLogs.length + 1,
+        reasoning: 'Task execution stopped because an error occurred.',
+        result: {
+          success: false,
+          message,
+        },
+        timestamp: new Date().toLocaleTimeString(),
+        screenSummary: 'Task execution error',
+      });
+
+      NexoraEventBus.emit({
+        type: 'ErrorOccurred',
+        message: `Task failed: ${message}`,
+      });
+
+      NexoraEventBus.emit({
+        type: 'SpeakFeedback',
+        text: 'Task-ti complete kora jayni. Ekti error hoyeche.',
+      });
+
+      this.taskStateManager.transitionTo(TaskState.FAILED);
+    }
   }
 
   describeScreen(): string {
-    const screenState = deviceManager.getScreenState();
-    const root = screenState?.screenRef || document.getElementById('nexora-virtual-screen');
-    if (!root) {
-      return 'Accessibility service off / screen not loaded';
-    }
+    try {
+      const screenState = deviceManager.getScreenState();
 
-    const elements = this.nodeParser.parseTree(root);
-    return elements
-      .slice(0, TaskOrchestrator.MAX_ELEMENTS)
-      .map((el) => {
-        const label = el.text || el.contentDescription || '(no label)';
-        const kind = el.isClickable ? 'clickable' : el.isEditable ? 'editable' : 'text';
-        return `- [${kind}] ${label}`;
-      })
-      .join('\n');
+      const root =
+        screenState?.screenRef ||
+        document.getElementById('nexora-virtual-screen');
+
+      if (!root) {
+        return 'Accessibility service off / screen not loaded';
+      }
+
+      const elements = this.nodeParser.parseTree(root);
+
+      return elements
+        .slice(0, TaskOrchestrator.MAX_ELEMENTS)
+        .map((element) => {
+          const label =
+            element.text ||
+            element.contentDescription ||
+            '(no label)';
+
+          const kind = element.isClickable
+            ? 'clickable'
+            : element.isEditable
+              ? 'editable'
+              : 'text';
+
+          return `- [${kind}] ${label}`;
+        })
+        .join('\n');
+    } catch (error) {
+      console.error('Screen description error:', error);
+      return 'Screen information is currently unavailable';
+    }
   }
 }

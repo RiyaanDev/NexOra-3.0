@@ -1,21 +1,18 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   X,
-  Sparkles,
+  Bot,
+  Eye,
+  EyeOff,
   CheckCircle2,
   AlertCircle,
-  Bot,
-  Zap,
-  Globe,
-  Radio,
-  ShieldCheck,
+  KeyRound,
+  Sparkles,
+  Loader2,
 } from 'lucide-react';
 
-import {
-  aiSettingsManager,
-  AISettings,
-} from '../brain/provider/AISettingsManager';
+import { aiSettingsManager, AISettings } from '../brain/provider/AISettingsManager';
 
 interface AISettingsModalProps {
   isOpen: boolean;
@@ -36,6 +33,7 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({
     aiSettingsManager.getSettings()
   );
 
+  const [showKeys, setShowKeys] = useState(false);
   const [testStatus, setTestStatus] = useState<TestStatus>(null);
 
   useEffect(() => {
@@ -43,28 +41,66 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({
 
     setSettings(aiSettingsManager.getSettings());
     setTestStatus(null);
+    setShowKeys(false);
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const selectProvider = (provider: AISettings['provider']) => {
+  const updateSetting = (
+    key: keyof AISettings,
+    value: string
+  ) => {
     setSettings((previous) => ({
       ...previous,
-      provider,
+      [key]: value,
     }));
 
     setTestStatus(null);
   };
 
   const handleSave = () => {
+    if (
+      settings.provider === 'openai' &&
+      !settings.openAiApiKey.trim()
+    ) {
+      setTestStatus({
+        testing: false,
+        success: false,
+        message: 'OpenAI API Key দিন।',
+      });
+      return;
+    }
+
+    if (
+      settings.provider === 'gemini' &&
+      !settings.geminiApiKey.trim()
+    ) {
+      setTestStatus({
+        testing: false,
+        success: false,
+        message: 'Gemini API Key দিন।',
+      });
+      return;
+    }
+
+    if (
+      settings.provider === 'auto' &&
+      !settings.openAiApiKey.trim() &&
+      !settings.geminiApiKey.trim()
+    ) {
+      setTestStatus({
+        testing: false,
+        success: false,
+        message: 'Auto mode-এর জন্য অন্তত একটি API Key দিন।',
+      });
+      return;
+    }
+
     aiSettingsManager.saveSettings({
       provider: settings.provider,
-
-      // API keys must be configured securely on the backend.
-      openAiApiKey: '',
-      geminiApiKey: '',
-
-      // AI provider selection never grants Android Admin authority.
+      openAiApiKey: settings.openAiApiKey.trim(),
+      geminiApiKey: settings.geminiApiKey.trim(),
+      model: settings.model,
       adminMode: false,
     });
 
@@ -72,9 +108,46 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({
   };
 
   const handleTestConnection = async () => {
+    if (
+      settings.provider === 'openai' &&
+      !settings.openAiApiKey.trim()
+    ) {
+      setTestStatus({
+        testing: false,
+        success: false,
+        message: 'প্রথমে OpenAI API Key দিন।',
+      });
+      return;
+    }
+
+    if (
+      settings.provider === 'gemini' &&
+      !settings.geminiApiKey.trim()
+    ) {
+      setTestStatus({
+        testing: false,
+        success: false,
+        message: 'প্রথমে Gemini API Key দিন।',
+      });
+      return;
+    }
+
+    if (
+      settings.provider === 'auto' &&
+      !settings.openAiApiKey.trim() &&
+      !settings.geminiApiKey.trim()
+    ) {
+      setTestStatus({
+        testing: false,
+        success: false,
+        message: 'Auto mode-এর জন্য অন্তত একটি API Key প্রয়োজন।',
+      });
+      return;
+    }
+
     setTestStatus({
       testing: true,
-      message: 'Testing AI connection...',
+      message: 'AI connection পরীক্ষা হচ্ছে...',
     });
 
     try {
@@ -88,82 +161,65 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({
           availableToolsJson: '[]',
           currentContextState: 'Connection test',
           preferredProvider: settings.provider,
+          openAiApiKey: settings.openAiApiKey.trim(),
+          geminiApiKey: settings.geminiApiKey.trim(),
+          model: settings.model,
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`Server returned HTTP ${response.status}`);
+        throw new Error(`HTTP ${response.status}`);
       }
 
       const data = await response.json();
 
-      setTestStatus({
-        testing: false,
-        success: true,
-        message: `Server responded successfully. Provider: ${
-          data.provider || 'Not specified'
-        }.`,
-      });
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Unknown error';
+      const actualProvider = String(data.provider || '');
+
+      const providerConnected =
+        settings.provider === 'openai'
+          ? actualProvider.toUpperCase().includes('OPENAI')
+          : settings.provider === 'gemini'
+            ? actualProvider.toUpperCase().includes('GEMINI')
+            : settings.provider === 'auto'
+              ? actualProvider.toUpperCase().includes('OPENAI') ||
+                actualProvider.toUpperCase().includes('GEMINI')
+              : actualProvider.includes('FREE');
 
       setTestStatus({
         testing: false,
+        success: providerConnected,
+        message: providerConnected
+          ? `Connection successful: ${actualProvider}`
+          : `Selected AI provider connect হয়নি। Server response: ${actualProvider || 'Unknown'}`,
+      });
+    } catch (error) {
+      setTestStatus({
+        testing: false,
         success: false,
-        message: `Connection failed: ${message}. Check the backend API configuration.`,
+        message:
+          error instanceof Error
+            ? `Connection failed: ${error.message}`
+            : 'Connection failed.',
       });
     }
   };
 
-  const providerOptions = [
-    {
-      id: 'auto' as const,
-      title: 'Auto',
-      subtitle: 'Backend-এর configured provider নির্বাচন করবে',
-      icon: Zap,
-      color: 'text-cyan-400',
-    },
-    {
-      id: 'openai' as const,
-      title: 'OpenAI',
-      subtitle: 'Backend-এ OpenAI API configure থাকতে হবে',
-      icon: Bot,
-      color: 'text-emerald-400',
-    },
-    {
-      id: 'gemini' as const,
-      title: 'Google Gemini',
-      subtitle: 'Backend-এ Gemini API configure থাকতে হবে',
-      icon: Globe,
-      color: 'text-blue-400',
-    },
-    {
-      id: 'free' as const,
-      title: 'Free / Local',
-      subtitle: 'Backend-এ Free বা Local provider implement থাকতে হবে',
-      icon: Sparkles,
-      color: 'text-purple-400',
-    },
-  ];
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-slate-900 border border-cyan-500/50 rounded-3xl p-6 shadow-[0_0_60px_rgba(6,182,212,0.3)] space-y-5">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4">
+      <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-cyan-500/40 bg-slate-900 p-5 space-y-5">
 
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-cyan-950 text-cyan-400 flex items-center justify-center">
-              <Bot className="w-5 h-5" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-cyan-950 flex items-center justify-center">
+              <Bot className="w-6 h-6 text-cyan-400" />
             </div>
 
             <div>
-              <h3 className="font-bold text-base text-white">
-                AI Engine Settings
-              </h3>
-
-              <p className="text-xs text-slate-400 font-bengali">
-                AI Provider নির্বাচন ও Connection Test
+              <h2 className="text-lg font-black text-white">
+                NEXORA AI
+              </h2>
+              <p className="text-xs text-slate-400">
+                API Configuration
               </p>
             </div>
           </div>
@@ -171,125 +227,151 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close AI settings"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            aria-label="Close settings"
+            className="p-2 rounded-lg text-slate-400 hover:bg-slate-800"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="space-y-3">
-          <label className="text-xs font-bold text-slate-300 block">
-            Choose AI Provider
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-slate-300">
+            AI Provider
           </label>
 
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            {providerOptions.map((option) => {
-              const Icon = option.icon;
-              const selected = settings.provider === option.id;
-
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => selectProvider(option.id)}
-                  className={`p-3 rounded-2xl border text-left transition-all ${
-                    selected
-                      ? 'bg-cyan-950/80 border-cyan-400 text-cyan-200 shadow-[0_0_20px_rgba(6,182,212,0.2)]'
-                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <div className={`flex items-center gap-1.5 font-bold ${option.color}`}>
-                    <Icon className="w-4 h-4" />
-                    <span>{option.title}</span>
-                  </div>
-
-                  <p className="text-[11px] text-slate-400 mt-1 font-bengali leading-relaxed">
-                    {option.subtitle}
-                  </p>
-                </button>
-              );
-            })}
-          </div>
+          <select
+            value={settings.provider}
+            onChange={(event) =>
+              updateSetting('provider', event.target.value)
+            }
+            className="w-full rounded-xl bg-slate-950 border border-slate-700 p-3 text-sm text-white outline-none focus:border-cyan-400"
+          >
+            <option value="auto">Auto Select</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="openai">OpenAI</option>
+            <option value="free">Free AI</option>
+          </select>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2">
-          <div className="flex items-center gap-2 text-cyan-300 text-xs font-bold">
-            <ShieldCheck className="w-4 h-4" />
+        {(settings.provider === 'gemini' ||
+          settings.provider === 'auto') && (
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-xs font-bold text-slate-300">
+              <KeyRound className="w-4 h-4 text-cyan-400" />
+              Gemini API Key
+            </label>
+
+            <input
+              type={showKeys ? 'text' : 'password'}
+              autoComplete="off"
+              value={settings.geminiApiKey}
+              onChange={(event) =>
+                updateSetting('geminiApiKey', event.target.value)
+              }
+              placeholder="Paste Gemini API Key"
+              className="w-full rounded-xl bg-slate-950 border border-slate-700 p-3 pr-12 text-sm text-white outline-none focus:border-cyan-400"
+            />
+          </div>
+        )}
+
+        {(settings.provider === 'openai' ||
+          settings.provider === 'auto') && (
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-xs font-bold text-slate-300">
+              <KeyRound className="w-4 h-4 text-emerald-400" />
+              OpenAI API Key
+            </label>
+
+            <input
+              type={showKeys ? 'text' : 'password'}
+              autoComplete="off"
+              value={settings.openAiApiKey}
+              onChange={(event) =>
+                updateSetting('openAiApiKey', event.target.value)
+              }
+              placeholder="Paste OpenAI API Key"
+              className="w-full rounded-xl bg-slate-950 border border-slate-700 p-3 pr-12 text-sm text-white outline-none focus:border-cyan-400"
+            />
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setShowKeys((previous) => !previous)}
+          className="text-xs text-cyan-300 flex items-center gap-2"
+        >
+          {showKeys ? (
+            <EyeOff className="w-4 h-4" />
+          ) : (
+            <Eye className="w-4 h-4" />
+          )}
+          {showKeys ? 'Hide API Keys' : 'Show API Keys'}
+        </button>
+
+        <div className="rounded-xl bg-slate-950 border border-slate-800 p-3 space-y-2">
+          <div className="flex items-center gap-2 text-xs font-bold text-emerald-300">
+            <ShieldCheckIcon />
             API Key Security
           </div>
 
-          <p className="text-[11px] text-slate-300 leading-relaxed font-bengali">
-            নিরাপত্তার জন্য এই App থেকে সরাসরি API Key সংরক্ষণ করা হবে না।
-            OpenAI বা Gemini Key পরবর্তীতে নিরাপদ Backend Environment
-            Secret হিসেবে configure করতে হবে।
+          <p className="text-[11px] leading-relaxed text-slate-400">
+            API Key Browser localStorage-এ Save হবে না।
+            আপাতত App Session-এর Memory-তে থাকবে।
+            App বন্ধ হলে আবার Key দিতে হবে।
           </p>
-
-          <p className="text-[10px] text-amber-300">
-            AI Provider নির্বাচন করলেই AI Connection নিশ্চিত হয় না।
-          </p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2">
-          <div className="text-xs font-bold text-slate-200">
-            Admin & Permission Safety
-          </div>
-
-          <p className="text-[11px] text-slate-400 leading-relaxed font-bengali">
-            AI Settings থেকে Android Device Admin বা Accessibility
-            Permission দেওয়া যায় না। গুরুত্বপূর্ণ কাজের আগে User
-            Confirmation বাধ্যতামূলক থাকবে।
-          </p>
-
-          <div className="flex items-center gap-2 text-xs text-emerald-300">
-            <ShieldCheck className="w-4 h-4" />
-            Admin Bypass Disabled
-          </div>
         </div>
 
         {testStatus && (
           <div
-            className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${
+            className={`rounded-xl border p-3 text-xs flex items-start gap-2 ${
               testStatus.testing
-                ? 'bg-blue-950/50 border-blue-800 text-blue-200'
+                ? 'border-blue-800 bg-blue-950/40 text-blue-200'
                 : testStatus.success
-                ? 'bg-emerald-950/50 border-emerald-800 text-emerald-200'
-                : 'bg-rose-950/50 border-rose-800 text-rose-200'
+                  ? 'border-emerald-800 bg-emerald-950/40 text-emerald-200'
+                  : 'border-rose-800 bg-rose-950/40 text-rose-200'
             }`}
           >
-            {testStatus.success ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+            {testStatus.testing ? (
+              <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+            ) : testStatus.success ? (
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
             ) : (
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <AlertCircle className="w-4 h-4 shrink-0" />
             )}
 
-            <div className="leading-relaxed text-[11px]">
-              {testStatus.message}
-            </div>
+            <span>{testStatus.message}</span>
           </div>
         )}
 
-        <div className="flex items-center gap-2 pt-2">
+        <div className="grid grid-cols-2 gap-3">
           <button
             type="button"
             onClick={handleTestConnection}
             disabled={testStatus?.testing === true}
-            className="px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-cyan-300 font-bold text-xs border border-slate-700 transition-all flex items-center gap-1.5"
+            className="rounded-xl bg-slate-800 border border-slate-700 py-3 text-xs font-bold text-cyan-300 disabled:opacity-50"
           >
-            <Radio className="w-3.5 h-3.5" />
-            Test Connection
+            TEST CONNECTION
           </button>
 
           <button
             type="button"
             onClick={handleSave}
-            className="flex-1 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs shadow-lg transition-all flex items-center justify-center gap-1.5"
+            className="rounded-xl bg-gradient-to-r from-cyan-400 to-blue-600 py-3 text-xs font-black text-slate-950 flex items-center justify-center gap-2"
           >
             <CheckCircle2 className="w-4 h-4" />
             SAVE SETTINGS
           </button>
         </div>
+
+        <p className="text-[10px] text-slate-500 text-center">
+          <Sparkles className="w-3 h-3 inline mr-1" />
+          NEXORA AI Configuration
+        </p>
       </div>
     </div>
   );
 };
+
+const ShieldCheckIcon: React.FC = () => (
+  <CheckCircle2 className="w-4 h-4" />
+);

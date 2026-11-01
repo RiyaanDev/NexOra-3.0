@@ -1,10 +1,16 @@
 
-export type AIProviderChoice = 'auto' | 'openai' | 'gemini' | 'free';
+export type AIProviderChoice =
+  | 'auto'
+  | 'openai'
+  | 'gemini'
+  | 'openrouter'
+  | 'free';
 
 export interface AISettings {
   provider: AIProviderChoice;
   openAiApiKey: string;
   geminiApiKey: string;
+  openRouterApiKey: string;
   model: string;
   adminMode: boolean;
 }
@@ -15,6 +21,7 @@ const DEFAULT_SETTINGS: AISettings = {
   provider: 'auto',
   openAiApiKey: '',
   geminiApiKey: '',
+  openRouterApiKey: '',
   model: 'gpt-4o-mini',
   adminMode: false,
 };
@@ -43,10 +50,9 @@ class AISettingsManagerService {
           provider: parsed.provider || 'auto',
           model: parsed.model || DEFAULT_SETTINGS.model,
           adminMode: false,
-
-          // Never restore API keys from browser storage.
           openAiApiKey: '',
           geminiApiKey: '',
+          openRouterApiKey: '',
         };
       }
     } catch (error) {
@@ -69,7 +75,6 @@ class AISettingsManagerService {
 
     if (typeof window !== 'undefined') {
       try {
-        // Persist only non-secret preferences.
         const safeSettings = {
           provider: this.settings.provider,
           model: this.settings.model,
@@ -98,6 +103,7 @@ class AISettingsManagerService {
     this.saveSettings({
       openAiApiKey: '',
       geminiApiKey: '',
+      openRouterApiKey: '',
     });
   }
 

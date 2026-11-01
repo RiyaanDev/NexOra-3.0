@@ -42,7 +42,7 @@ public class NexoraAccessibilityService extends AccessibilityService {
         }
 
         lastEventType = event.getEventType();
-        lastEventTime = event.getEventTime();
+        lastEventTime = System.currentTimeMillis();
     }
 
     @Override

@@ -194,6 +194,8 @@ export const App: React.FC = () => {
           </button>
         </div>
 
+        <NativeBridgeTest />
+
         <div className="w-full text-center space-y-4">
 
           {!isActivated ? (

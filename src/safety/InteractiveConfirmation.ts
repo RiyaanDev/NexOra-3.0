@@ -1,4 +1,5 @@
-import { NexoraTool, RiskTier } from '../types';
+
+import { NexoraTool } from '../types';
 import { UserConfirmationCallback } from './UserConfirmationCallback';
 
 export interface PendingConfirmationRequest {
@@ -9,9 +10,16 @@ export interface PendingConfirmationRequest {
   resolve: (allowed: boolean) => void;
 }
 
-export class InteractiveConfirmation implements UserConfirmationCallback {
-  private currentRequest: PendingConfirmationRequest | null = null;
-  private listeners: ((req: PendingConfirmationRequest | null) => void)[] = [];
+export class InteractiveConfirmation
+  implements UserConfirmationCallback
+{
+  private pendingRequests: PendingConfirmationRequest[] = [];
+
+  private listeners: Set<
+    (req: PendingConfirmationRequest | null) => void
+  > = new Set();
+
+  private requestCounter = 0;
 
   requestConfirmation(
     tool: NexoraTool,
@@ -19,42 +27,79 @@ export class InteractiveConfirmation implements UserConfirmationCallback {
     explanation: string
   ): Promise<boolean> {
     return new Promise<boolean>((resolve) => {
-      this.currentRequest = {
-        id: Math.random().toString(36).substring(7),
+      this.requestCounter++;
+
+      const request: PendingConfirmationRequest = {
+        id: `confirmation-${Date.now()}-${this.requestCounter}`,
         tool,
         parameters,
         explanation,
-        resolve: (allowed: boolean) => {
-          this.currentRequest = null;
-          this.notify();
-          resolve(allowed);
-        },
+        resolve,
       };
+
+      this.pendingRequests.push(request);
       this.notify();
     });
   }
 
   getCurrentRequest(): PendingConfirmationRequest | null {
-    return this.currentRequest;
+    return this.pendingRequests[0] || null;
+  }
+
+  getPendingCount(): number {
+    return this.pendingRequests.length;
   }
 
   respond(allowed: boolean): void {
-    if (this.currentRequest) {
-      this.currentRequest.resolve(allowed);
+    const request = this.pendingRequests.shift();
+
+    if (!request) return;
+
+    try {
+      request.resolve(allowed);
+    } finally {
+      this.notify();
     }
   }
 
-  subscribe(fn: (req: PendingConfirmationRequest | null) => void): () => void {
-    this.listeners.push(fn);
-    fn(this.currentRequest);
+  denyCurrent(): void {
+    this.respond(false);
+  }
+
+  subscribe(
+    fn: (req: PendingConfirmationRequest | null) => void
+  ): () => void {
+    this.listeners.add(fn);
+
+    try {
+      fn(this.getCurrentRequest());
+    } catch (error) {
+      console.error(
+        'InteractiveConfirmation subscriber error:',
+        error
+      );
+    }
+
     return () => {
-      this.listeners = this.listeners.filter((l) => l !== fn);
+      this.listeners.delete(fn);
     };
   }
 
   private notify(): void {
-    this.listeners.forEach((fn) => fn(this.currentRequest));
+    const currentRequest = this.getCurrentRequest();
+
+    this.listeners.forEach((listener) => {
+      try {
+        listener(currentRequest);
+      } catch (error) {
+        console.error(
+          'InteractiveConfirmation listener error:',
+          error
+        );
+      }
+    });
   }
 }
 
-export const interactiveConfirmation = new InteractiveConfirmation();
+export const interactiveConfirmation =
+  new InteractiveConfirmation();

@@ -5,6 +5,7 @@ import {
   getNexoraNativeInfo,
   getNexoraInstalledApps,
   launchNexoraApp,
+  getNexoraAccessibilityStatus,
   isNexoraNativeAvailable,
   NexoraNativeInfo,
   NexoraInstalledApp,
@@ -13,13 +14,18 @@ import {
 export const NativeBridgeTest: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [checkingAccessibility, setCheckingAccessibility] = useState(false);
   const [launchingPackage, setLaunchingPackage] = useState('');
 
   const [info, setInfo] = useState<NexoraNativeInfo | null>(null);
   const [apps, setApps] = useState<NexoraInstalledApp[]>([]);
 
+  const [accessibilityConnected, setAccessibilityConnected] =
+    useState<boolean | null>(null);
+
   const [error, setError] = useState('');
   const [appError, setAppError] = useState('');
+  const [accessibilityError, setAccessibilityError] = useState('');
   const [launchMessage, setLaunchMessage] = useState('');
   const [search, setSearch] = useState('');
 
@@ -48,6 +54,37 @@ export const NativeBridgeTest: React.FC = () => {
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkAccessibility = async () => {
+    setCheckingAccessibility(true);
+    setAccessibilityError('');
+
+    try {
+      if (!isNexoraNativeAvailable()) {
+        throw new Error(
+          'Android APK থেকে Accessibility status পরীক্ষা করো।'
+        );
+      }
+
+      const result = await getNexoraAccessibilityStatus();
+
+      if (!result || !result.success) {
+        throw new Error(
+          'Accessibility status পাওয়া যায়নি।'
+        );
+      }
+
+      setAccessibilityConnected(result.connected);
+    } catch (err) {
+      setAccessibilityError(
+        err instanceof Error
+          ? err.message
+          : 'Unable to check Accessibility status.'
+      );
+    } finally {
+      setCheckingAccessibility(false);
     }
   };
 
@@ -180,6 +217,59 @@ export const NativeBridgeTest: React.FC = () => {
           {error}
         </p>
       )}
+
+      <div className="border-t border-slate-800 pt-4 space-y-3">
+
+        <div>
+          <h3 className="text-white font-bold">
+            Accessibility Service
+          </h3>
+
+          <p className="text-xs text-slate-400 mt-1">
+            Check whether Nexora Accessibility Service is connected.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={checkAccessibility}
+          disabled={checkingAccessibility}
+          className="w-full rounded-xl bg-emerald-500 text-slate-950 font-bold py-3 disabled:opacity-50"
+        >
+          {checkingAccessibility
+            ? 'Checking...'
+            : 'CHECK ACCESSIBILITY STATUS'}
+        </button>
+
+        {accessibilityConnected !== null && (
+          <div className="rounded-xl bg-slate-950 border border-slate-800 p-3">
+
+            {accessibilityConnected ? (
+              <p className="text-emerald-400 font-bold">
+                ● Accessibility Service Connected
+              </p>
+            ) : (
+              <p className="text-amber-400 font-bold">
+                ● Accessibility Service Not Connected
+              </p>
+            )}
+
+            <p className="text-xs text-slate-400 mt-2">
+              {accessibilityConnected
+                ? 'Nexora Accessibility Service is currently active.'
+                : 'Enable Nexora Accessibility Service from Android Settings, then check again.'}
+            </p>
+
+          </div>
+        )}
+
+        {accessibilityError && (
+          <p className="text-sm text-red-400 break-words">
+            {accessibilityError}
+          </p>
+        )}
+
+      </div>
 
       <div className="border-t border-slate-800 pt-4 space-y-4">
 

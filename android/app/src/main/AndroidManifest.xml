@@ -1,4 +1,3 @@
-
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
@@ -35,6 +34,8 @@
 
         <service
             android:name=".accessibility.NexoraAccessibilityService"
+            android:label="@string/accessibility_service_label"
+            android:description="@string/accessibility_service_description"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="true">
 

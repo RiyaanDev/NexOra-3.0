@@ -68,6 +68,17 @@ export class VoiceEngine {
     this.notify();
   }
 
+  // Reset only if the current state is LISTENING.
+  // Do not reset UNDERSTANDING or another active state.
+  private resetListeningTaskState(): void {
+    if (
+      this.taskStateManager.getCurrentState() ===
+      TaskState.LISTENING
+    ) {
+      this.taskStateManager.transitionTo(TaskState.IDLE);
+    }
+  }
+
   // -----------------------------------------
   // TEXT TO SPEECH INITIALIZATION
   // -----------------------------------------
@@ -85,8 +96,8 @@ export class VoiceEngine {
 
       const voices = window.speechSynthesis.getVoices();
 
-      const bnVoice = voices.find(
-        (voice) => voice.lang.toLowerCase().startsWith('bn')
+      const bnVoice = voices.find((voice) =>
+        voice.lang.toLowerCase().startsWith('bn')
       );
 
       const enVoice = voices.find(
@@ -137,7 +148,6 @@ export class VoiceEngine {
       this.recognition.maxAlternatives = 1;
       this.recognition.lang = this.selectedLanguage;
 
-      // Recognition successfully started
       this.recognition.onstart = () => {
         if (this.isDestroyed) return;
 
@@ -147,7 +157,6 @@ export class VoiceEngine {
         this.notify();
       };
 
-      // Recognition result received
       this.recognition.onresult = (event: any) => {
         if (this.isDestroyed) return;
 
@@ -183,7 +192,6 @@ export class VoiceEngine {
         }
       };
 
-      // Recognition error
       this.recognition.onerror = (event: any) => {
         if (this.isDestroyed) return;
 
@@ -229,16 +237,17 @@ export class VoiceEngine {
               'Voice recognition-এ সমস্যা হয়েছে।';
         }
 
+        this.resetListeningTaskState();
         this.notify();
       };
 
-      // Recognition stopped
       this.recognition.onend = () => {
         if (this.isDestroyed) return;
 
         this.isStarting = false;
         this.isListening = false;
 
+        this.resetListeningTaskState();
         this.notify();
       };
 
@@ -328,7 +337,6 @@ export class VoiceEngine {
   // -----------------------------------------
 
   private observeEvents(): void {
-    // Save unsubscribe callback for cleanup.
     this.eventBusUnsubscribe = NexoraEventBus.subscribe(
       (event) => {
         if (this.isDestroyed) return;
@@ -361,7 +369,8 @@ export class VoiceEngine {
     }
 
     if (typeof window !== 'undefined') {
-      const voices = window.speechSynthesis?.getVoices() || [];
+      const voices =
+        window.speechSynthesis?.getVoices() || [];
 
       const matchingVoice = voices.find((voice) =>
         lang === 'bn-IN'
@@ -427,6 +436,7 @@ export class VoiceEngine {
       this.lastFeedback =
         'Microphone চালু করা যায়নি। আবার চেষ্টা করুন।';
 
+      this.resetListeningTaskState();
       this.notify();
     }
   }
@@ -456,6 +466,7 @@ export class VoiceEngine {
     }
 
     if (wasActive) {
+      this.resetListeningTaskState();
       this.playChime(440);
     }
 
@@ -575,7 +586,14 @@ export class VoiceEngine {
 
     this.listeners.add(fn);
 
-    fn(this.getState());
+    try {
+      fn(this.getState());
+    } catch (error) {
+      console.error(
+        'Voice initial listener error:',
+        error
+      );
+    }
 
     return () => {
       this.listeners.delete(fn);
@@ -591,13 +609,11 @@ export class VoiceEngine {
 
     this.isDestroyed = true;
 
-    // Remove EventBus subscription
     if (this.eventBusUnsubscribe) {
       this.eventBusUnsubscribe();
       this.eventBusUnsubscribe = null;
     }
 
-    // Stop Speech Recognition
     if (this.recognition) {
       try {
         this.recognition.onstart = null;
@@ -617,7 +633,6 @@ export class VoiceEngine {
       this.recognition = null;
     }
 
-    // Stop Text to Speech
     if (
       typeof window !== 'undefined' &&
       'speechSynthesis' in window
@@ -634,7 +649,6 @@ export class VoiceEngine {
       }
     }
 
-    // Close Audio Context
     if (this.audioCtx) {
       if (this.audioCtx.state !== 'closed') {
         void this.audioCtx.close().catch(() => {});
@@ -643,7 +657,6 @@ export class VoiceEngine {
       this.audioCtx = null;
     }
 
-    // Clear subscribers
     this.listeners.clear();
 
     this.isListening = false;

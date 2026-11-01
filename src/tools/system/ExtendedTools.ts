@@ -1,131 +1,367 @@
-import { NexoraTool, RiskTier, ToolResult } from '../../types';
+
+import {
+  NexoraTool,
+  RiskTier,
+  ToolResult,
+} from '../../types';
+
 import { deviceManager } from '../../simulator/DeviceContext';
 
-// Call Handling Tools: Answer, Cut, Dial
+/**
+ * IMPORTANT:
+ * These tools currently operate on the NEXORA Virtual Device Simulator.
+ * They do not control real Android calls, contacts, messages or apps.
+ */
+
+// -----------------------------------------
+// CALL TOOLS — SIMULATOR ONLY
+// -----------------------------------------
+
 export class AnswerCallTool implements NexoraTool {
   readonly name = 'answer_call';
-  readonly description = 'Answers an active incoming phone call hands-free.';
-  readonly riskLevel = RiskTier.LOW;
 
-  async execute(): Promise<ToolResult> {
+  readonly description =
+    'Answers a simulated incoming call in the NEXORA Virtual Device.';
+
+  readonly riskLevel = RiskTier.HIGH;
+
+  async execute(
+    _parameters: Record<string, any>
+  ): Promise<ToolResult> {
     const screenState = deviceManager.getScreenState();
-    if (screenState && (screenState as any).answerCall) {
-      (screenState as any).answerCall();
-      return { success: true, message: 'Incoming call answered successfully.' };
+
+    if (!screenState?.answerCall) {
+      return {
+        success: false,
+        message: 'Virtual call control is not available.',
+      };
     }
-    return { success: true, message: 'Call answered.' };
+
+    screenState.answerCall();
+
+    return {
+      success: true,
+      message: 'Virtual incoming call answer action requested. Check the simulator.',
+    };
   }
 }
 
 export class CutCallTool implements NexoraTool {
   readonly name = 'cut_call';
-  readonly description = 'Rejects or disconnects an incoming or active phone call.';
-  readonly riskLevel = RiskTier.LOW;
 
-  async execute(): Promise<ToolResult> {
+  readonly description =
+    'Rejects or disconnects a simulated call in the NEXORA Virtual Device.';
+
+  readonly riskLevel = RiskTier.HIGH;
+
+  async execute(
+    _parameters: Record<string, any>
+  ): Promise<ToolResult> {
     const screenState = deviceManager.getScreenState();
-    if (screenState && (screenState as any).cutCall) {
-      (screenState as any).cutCall();
-      return { success: true, message: 'Call rejected / cut successfully.' };
+
+    if (!screenState?.cutCall) {
+      return {
+        success: false,
+        message: 'Virtual call control is not available.',
+      };
     }
-    return { success: true, message: 'Call disconnected.' };
+
+    screenState.cutCall();
+
+    return {
+      success: true,
+      message: 'Virtual call disconnect action requested. Check the simulator.',
+    };
   }
 }
 
 export class MakeCallTool implements NexoraTool {
   readonly name = 'make_call';
-  readonly description = 'Dials and places an outgoing phone call to a contact or phone number.';
-  readonly riskLevel = RiskTier.LOW;
 
-  async execute(parameters: Record<string, any>): Promise<ToolResult> {
-    const target = parameters['contactName'] || parameters['phoneNumber'] || 'Contact';
-    const screenState = deviceManager.getScreenState();
-    if (screenState && (screenState as any).placeCall) {
-      (screenState as any).placeCall(target);
+  readonly description =
+    'Starts a simulated outgoing call in the NEXORA Virtual Device.';
+
+  readonly riskLevel = RiskTier.HIGH;
+
+  async execute(
+    parameters: Record<string, any>
+  ): Promise<ToolResult> {
+    const target =
+      parameters['contactName'] ||
+      parameters['phoneNumber'];
+
+    if (
+      typeof target !== 'string' ||
+      !target.trim()
+    ) {
+      return {
+        success: false,
+        message: 'A contactName or phoneNumber is required.',
+      };
     }
-    return { success: true, message: `Calling ${target}...` };
+
+    const screenState = deviceManager.getScreenState();
+
+    if (!screenState?.placeCall) {
+      return {
+        success: false,
+        message: 'Virtual call control is not available.',
+      };
+    }
+
+    screenState.placeCall(target.trim());
+
+    return {
+      success: true,
+      message: `Virtual call action requested for ${target.trim()}. No real phone call was placed.`,
+    };
   }
 }
 
-// Search, Manage, Arrange, Modify, Create, Delete Tools
+// -----------------------------------------
+// SEARCH TOOL — SIMULATOR ONLY
+// -----------------------------------------
+
 export class SearchTool implements NexoraTool {
   readonly name = 'search_query';
-  readonly description = 'Searches web queries, device contacts, or notes.';
+
+  readonly description =
+    'Opens a simulated browser search for a query in the NEXORA Virtual Device.';
+
   readonly riskLevel = RiskTier.LOW;
 
-  async execute(parameters: Record<string, any>): Promise<ToolResult> {
-    const query = parameters['query'] || parameters['text'] || '';
-    const screenState = deviceManager.getScreenState();
-    if (screenState && (screenState as any).performSearch) {
-      (screenState as any).performSearch(query);
-      return { success: true, message: `Searched for "${query}"` };
+  async execute(
+    parameters: Record<string, any>
+  ): Promise<ToolResult> {
+    const query =
+      parameters['query'] ||
+      parameters['text'];
+
+    if (
+      typeof query !== 'string' ||
+      !query.trim()
+    ) {
+      return {
+        success: false,
+        message: 'A search query is required.',
+      };
     }
-    return { success: true, message: `Search completed for: "${query}"` };
+
+    const screenState = deviceManager.getScreenState();
+
+    if (!screenState?.performSearch) {
+      return {
+        success: false,
+        message: 'Virtual search is not available.',
+      };
+    }
+
+    screenState.performSearch(query.trim());
+
+    return {
+      success: true,
+      message: `Virtual browser search requested for "${query.trim()}". This is not a verified live web search.`,
+    };
   }
 }
+
+// -----------------------------------------
+// CREATE TOOL — SIMULATOR ONLY
+// -----------------------------------------
 
 export class CreateItemTool implements NexoraTool {
   readonly name = 'create_item';
-  readonly description = 'Creates a new note, task, contact, or file entry.';
+
+  readonly description =
+    'Creates a simulated note or contact in the NEXORA Virtual Device.';
+
   readonly riskLevel = RiskTier.LOW;
 
-  async execute(parameters: Record<string, any>): Promise<ToolResult> {
+  async execute(
+    parameters: Record<string, any>
+  ): Promise<ToolResult> {
     const type = parameters['type'] || 'note';
-    const content = parameters['content'] || parameters['title'] || parameters['name'] || 'New Entry';
-    const screenState = deviceManager.getScreenState();
-    if (screenState && (screenState as any).createItem) {
-      (screenState as any).createItem(type, content);
-      return { success: true, message: `Created new ${type}: "${content}"` };
+
+    const content =
+      parameters['content'] ||
+      parameters['title'] ||
+      parameters['name'];
+
+    if (
+      typeof content !== 'string' ||
+      !content.trim()
+    ) {
+      return {
+        success: false,
+        message: 'Content, title or name is required.',
+      };
     }
-    return { success: true, message: `Successfully created ${type}.` };
+
+    if (type !== 'note' && type !== 'contact') {
+      return {
+        success: false,
+        message: 'The simulator currently supports only note and contact creation.',
+      };
+    }
+
+    const screenState = deviceManager.getScreenState();
+
+    if (!screenState?.createItem) {
+      return {
+        success: false,
+        message: 'Virtual item creation is not available.',
+      };
+    }
+
+    screenState.createItem(type, content.trim());
+
+    return {
+      success: true,
+      message: `Virtual ${type} creation requested. Check the simulator to verify the result.`,
+    };
   }
 }
+
+// -----------------------------------------
+// MODIFY TOOL — SIMULATOR ONLY
+// -----------------------------------------
 
 export class ModifyItemTool implements NexoraTool {
   readonly name = 'modify_item';
-  readonly description = 'Updates or modifies an existing item, note, or setting.';
-  readonly riskLevel = RiskTier.LOW;
 
-  async execute(parameters: Record<string, any>): Promise<ToolResult> {
-    const target = parameters['target'] || 'item';
-    const newValue = parameters['newValue'] || parameters['content'] || 'Updated';
-    const screenState = deviceManager.getScreenState();
-    if (screenState && (screenState as any).modifyItem) {
-      (screenState as any).modifyItem(target, newValue);
-      return { success: true, message: `Modified ${target} to "${newValue}"` };
+  readonly description =
+    'Requests a simulated note modification in the NEXORA Virtual Device.';
+
+  readonly riskLevel = RiskTier.MEDIUM;
+
+  async execute(
+    parameters: Record<string, any>
+  ): Promise<ToolResult> {
+    const target = parameters['target'];
+
+    const newValue =
+      parameters['newValue'] ||
+      parameters['content'];
+
+    if (
+      typeof target !== 'string' ||
+      !target.trim()
+    ) {
+      return {
+        success: false,
+        message: 'A target is required.',
+      };
     }
-    return { success: true, message: `Modified ${target} successfully.` };
+
+    if (
+      typeof newValue !== 'string' ||
+      !newValue.trim()
+    ) {
+      return {
+        success: false,
+        message: 'A newValue or content is required.',
+      };
+    }
+
+    const screenState = deviceManager.getScreenState();
+
+    if (!screenState?.modifyItem) {
+      return {
+        success: false,
+        message: 'Virtual item modification is not available.',
+      };
+    }
+
+    screenState.modifyItem(
+      target.trim(),
+      newValue.trim()
+    );
+
+    return {
+      success: true,
+      message: 'Virtual modification action requested. The simulator currently modifies its first note; target-specific editing is not yet implemented.',
+    };
   }
 }
+
+// -----------------------------------------
+// DELETE TOOL — SIMULATOR ONLY
+// -----------------------------------------
 
 export class DeleteItemTool implements NexoraTool {
   readonly name = 'delete_item';
-  readonly description = 'Deletes a specified note, message, contact, or file entry.';
-  readonly riskLevel = RiskTier.LOW;
 
-  async execute(parameters: Record<string, any>): Promise<ToolResult> {
-    const target = parameters['target'] || parameters['id'] || 'item';
-    const screenState = deviceManager.getScreenState();
-    if (screenState && (screenState as any).deleteItem) {
-      (screenState as any).deleteItem(target);
-      return { success: true, message: `Deleted ${target} successfully.` };
+  readonly description =
+    'Requests deletion of a simulated note in the NEXORA Virtual Device.';
+
+  readonly riskLevel = RiskTier.HIGH;
+
+  async execute(
+    parameters: Record<string, any>
+  ): Promise<ToolResult> {
+    const target =
+      parameters['target'] ||
+      parameters['id'];
+
+    if (
+      typeof target !== 'string' ||
+      !target.trim()
+    ) {
+      return {
+        success: false,
+        message: 'A target or item ID is required.',
+      };
     }
-    return { success: true, message: `Deleted ${target}.` };
+
+    const screenState = deviceManager.getScreenState();
+
+    if (!screenState?.deleteItem) {
+      return {
+        success: false,
+        message: 'Virtual item deletion is not available.',
+      };
+    }
+
+    screenState.deleteItem(target.trim());
+
+    return {
+      success: true,
+      message: 'Virtual delete action requested. The simulator currently removes its first note; target-specific deletion is not yet implemented.',
+    };
   }
 }
 
+// -----------------------------------------
+// ARRANGE TOOL — SIMULATOR ONLY
+// -----------------------------------------
+
 export class ArrangeItemsTool implements NexoraTool {
   readonly name = 'arrange_items';
-  readonly description = 'Sorts, arranges, or filters notes, messages, or apps.';
+
+  readonly description =
+    'Rearranges simulated notes in the NEXORA Virtual Device.';
+
   readonly riskLevel = RiskTier.LOW;
 
-  async execute(parameters: Record<string, any>): Promise<ToolResult> {
+  async execute(
+    parameters: Record<string, any>
+  ): Promise<ToolResult> {
     const sortBy = parameters['sortBy'] || 'latest';
+
     const screenState = deviceManager.getScreenState();
-    if (screenState && (screenState as any).arrangeItems) {
-      (screenState as any).arrangeItems(sortBy);
-      return { success: true, message: `Arranged items by ${sortBy}` };
+
+    if (!screenState?.arrangeItems) {
+      return {
+        success: false,
+        message: 'Virtual item arrangement is not available.',
+      };
     }
-    return { success: true, message: `Arranged items successfully.` };
+
+    screenState.arrangeItems(String(sortBy));
+
+    return {
+      success: true,
+      message: 'Virtual arrangement action requested. Check the simulator.',
+    };
   }
 }

@@ -59,6 +59,41 @@ public class NexoraNativePlugin extends Plugin {
         call.resolve(result);
     }
 
+    // Get latest safe screen metadata.
+    @PluginMethod
+    public void getLastScreenInfo(PluginCall call) {
+
+        JSObject result = new JSObject();
+
+        boolean connected =
+            NexoraAccessibilityService.isConnected();
+
+        result.put("success", true);
+        result.put("connected", connected);
+
+        result.put(
+            "packageName",
+            NexoraAccessibilityService.getLastPackageName()
+        );
+
+        result.put(
+            "className",
+            NexoraAccessibilityService.getLastClassName()
+        );
+
+        result.put(
+            "eventType",
+            NexoraAccessibilityService.getLastEventType()
+        );
+
+        result.put(
+            "eventTime",
+            NexoraAccessibilityService.getLastEventTime()
+        );
+
+        call.resolve(result);
+    }
+
     @PluginMethod
     public void openAccessibilitySettings(PluginCall call) {
         try {

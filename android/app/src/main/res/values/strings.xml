@@ -1,3 +1,4 @@
+
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">NEXORA</string>
@@ -6,5 +7,5 @@
     <string name="custom_url_scheme">com.nexora.app</string>
 
     <string name="accessibility_service_label">NEXORA Accessibility Service</string>
-    <string name="accessibility_service_description">NEXORA uses Accessibility Service to understand screen navigation and perform user-authorized actions. It does not collect passwords, OTPs or sensitive information.</string>
+    <string name="accessibility_service_description">Currently, NEXORA Accessibility Service only reports whether the service is connected. It does not read screen content, collect personal data, or perform actions.</string>
 </resources>

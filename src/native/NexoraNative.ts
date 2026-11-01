@@ -7,6 +7,11 @@ export interface NexoraNativeInfo {
   androidVersion: string;
   sdkVersion: number;
   packageName: string;
+
+  manufacturer: string;
+  brand: string;
+  model: string;
+  device: string;
 }
 
 interface NexoraNativePlugin {

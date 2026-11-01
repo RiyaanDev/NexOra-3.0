@@ -96,8 +96,6 @@ export const App: React.FC = () => {
     registry.registerTool(new ClearAppDataTool());
 
     const riskGate = new RiskGateManager(interactiveConfirmation);
-
-    // Elevated-risk actions still require confirmation.
     riskGate.setAdminModeAuthorized(false);
 
     const provider = new GeminiAIProvider('gemini-3.8-flash');
@@ -156,8 +154,6 @@ export const App: React.FC = () => {
 
     const unsubSettings = aiSettingsManager.subscribe((settings) => {
       setAiSettings(settings);
-
-      // Admin mode does not bypass the RiskGate confirmation.
       riskGateManager.setAdminModeAuthorized(false);
     });
 
@@ -577,13 +573,16 @@ export const App: React.FC = () => {
         </>
       )}
 
-      <FloatingOrb
-        voiceEngine={voiceEngine}
-        taskStateManager={taskStateManager}
-        onOpenDashboard={handleReopenDashboard}
-        isDeviceLocked={isDeviceLocked}
-        onToggleDeviceLock={handleToggleLock}
-      />
+      {/* Floating voice controls are available only after session activation. */}
+      {isActivated && (
+        <FloatingOrb
+          voiceEngine={voiceEngine}
+          taskStateManager={taskStateManager}
+          onOpenDashboard={handleReopenDashboard}
+          isDeviceLocked={isDeviceLocked}
+          onToggleDeviceLock={handleToggleLock}
+        />
+      )}
 
       <AISettingsModal
         isOpen={showAISettingsModal}

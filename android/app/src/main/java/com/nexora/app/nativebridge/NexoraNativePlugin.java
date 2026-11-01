@@ -17,6 +17,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.JSArray;
 
+import com.nexora.app.accessibility.NexoraAccessibilityService;
+
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,6 +41,19 @@ public class NexoraNativePlugin extends Plugin {
         result.put("brand", Build.BRAND);
         result.put("model", Build.MODEL);
         result.put("device", Build.DEVICE);
+
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void isAccessibilityServiceConnected(PluginCall call) {
+        JSObject result = new JSObject();
+
+        result.put("success", true);
+        result.put(
+            "connected",
+            NexoraAccessibilityService.isConnected()
+        );
 
         call.resolve(result);
     }

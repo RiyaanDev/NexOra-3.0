@@ -27,10 +27,20 @@ export interface NexoraInstalledAppsResult {
   message?: string;
 }
 
+export interface NexoraLaunchAppResult {
+  success: boolean;
+  packageName?: string;
+  message?: string;
+}
+
 interface NexoraNativePlugin {
   getNativeInfo(): Promise<NexoraNativeInfo>;
 
   getInstalledApps(): Promise<NexoraInstalledAppsResult>;
+
+  launchApp(options: {
+    packageName: string;
+  }): Promise<NexoraLaunchAppResult>;
 }
 
 const NexoraNative = registerPlugin<NexoraNativePlugin>(
@@ -57,4 +67,21 @@ export const getNexoraInstalledApps =
     }
 
     return await NexoraNative.getInstalledApps();
+  };
+
+export const launchNexoraApp =
+  async (
+    packageName: string
+  ): Promise<NexoraLaunchAppResult | null> => {
+    if (!Capacitor.isNativePlatform()) {
+      return null;
+    }
+
+    if (!packageName || !packageName.trim()) {
+      throw new Error('App package name is required.');
+    }
+
+    return await NexoraNative.launchApp({
+      packageName: packageName.trim(),
+    });
   };

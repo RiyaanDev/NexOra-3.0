@@ -7,15 +7,29 @@ export interface NexoraNativeInfo {
   androidVersion: string;
   sdkVersion: number;
   packageName: string;
-
   manufacturer: string;
   brand: string;
   model: string;
   device: string;
 }
 
+export interface NexoraInstalledApp {
+  appName: string;
+  packageName: string;
+  activityName: string;
+}
+
+export interface NexoraInstalledAppsResult {
+  success: boolean;
+  count: number;
+  apps: NexoraInstalledApp[];
+  message?: string;
+}
+
 interface NexoraNativePlugin {
   getNativeInfo(): Promise<NexoraNativeInfo>;
+
+  getInstalledApps(): Promise<NexoraInstalledAppsResult>;
 }
 
 const NexoraNative = registerPlugin<NexoraNativePlugin>(
@@ -33,4 +47,13 @@ export const getNexoraNativeInfo =
     }
 
     return await NexoraNative.getNativeInfo();
+  };
+
+export const getNexoraInstalledApps =
+  async (): Promise<NexoraInstalledAppsResult | null> => {
+    if (!Capacitor.isNativePlatform()) {
+      return null;
+    }
+
+    return await NexoraNative.getInstalledApps();
   };

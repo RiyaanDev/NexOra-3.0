@@ -1,3 +1,4 @@
+
 export type AIProviderChoice = 'auto' | 'openai' | 'gemini' | 'free';
 
 export interface AISettings {
@@ -8,7 +9,7 @@ export interface AISettings {
   adminMode: boolean;
 }
 
-const STORAGE_KEY = 'nexora_ai_settings_v2';
+const STORAGE_KEY = 'nexora_ai_settings_v3';
 
 const DEFAULT_SETTINGS: AISettings = {
   provider: 'auto',
@@ -27,14 +28,31 @@ class AISettingsManagerService {
   }
 
   private loadSettings(): AISettings {
-    if (typeof window === 'undefined') return DEFAULT_SETTINGS;
+    if (typeof window === 'undefined') {
+      return { ...DEFAULT_SETTINGS };
+    }
+
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
+
       if (stored) {
         const parsed = JSON.parse(stored);
-        return { ...DEFAULT_SETTINGS, ...parsed };
+
+        return {
+          ...DEFAULT_SETTINGS,
+          provider: parsed.provider || 'auto',
+          model: parsed.model || DEFAULT_SETTINGS.model,
+          adminMode: false,
+
+          // Never restore API keys from browser storage.
+          openAiApiKey: '',
+          geminiApiKey: '',
+        };
       }
-    } catch {}
+    } catch (error) {
+      console.error('Failed to load AI settings:', error);
+    }
+
     return { ...DEFAULT_SETTINGS };
   }
 
@@ -43,20 +61,59 @@ class AISettingsManagerService {
   }
 
   saveSettings(newSettings: Partial<AISettings>): void {
-    this.settings = { ...this.settings, ...newSettings };
+    this.settings = {
+      ...this.settings,
+      ...newSettings,
+      adminMode: false,
+    };
+
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
-      } catch {}
+        // Persist only non-secret preferences.
+        const safeSettings = {
+          provider: this.settings.provider,
+          model: this.settings.model,
+          adminMode: false,
+        };
+
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify(safeSettings)
+        );
+      } catch (error) {
+        console.error('Failed to save AI settings:', error);
+      }
     }
-    this.listeners.forEach((fn) => fn(this.settings));
+
+    this.listeners.forEach((listener) => {
+      try {
+        listener({ ...this.settings });
+      } catch (error) {
+        console.error('AI settings listener error:', error);
+      }
+    });
+  }
+
+  clearApiKeys(): void {
+    this.saveSettings({
+      openAiApiKey: '',
+      geminiApiKey: '',
+    });
   }
 
   subscribe(fn: (settings: AISettings) => void): () => void {
     this.listeners.push(fn);
-    fn(this.settings);
+
+    try {
+      fn({ ...this.settings });
+    } catch (error) {
+      console.error('AI settings subscriber error:', error);
+    }
+
     return () => {
-      this.listeners = this.listeners.filter((l) => l !== fn);
+      this.listeners = this.listeners.filter(
+        (listener) => listener !== fn
+      );
     };
   }
 }
